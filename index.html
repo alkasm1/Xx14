@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<title>Language Frequency Protocol v2</title>
+
+<style>
+body {
+  font-family: "Cairo", sans-serif;
+  background: #0d1117;
+  color: #e6edf3;
+  margin: 0;
+  padding: 0;
+}
+.container {
+  max-width: 900px;
+  margin: 40px auto;
+  background: #161b22;
+  border-radius: 14px;
+  padding: 28px;
+  border: 1px solid #30363d;
+}
+textarea, input {
+  width: 100%;
+  padding: 10px;
+  border-radius: 8px;
+  background: #0d1117;
+  color: white;
+  border: 1px solid #30363d;
+}
+button {
+  margin-top: 10px;
+  padding: 10px;
+  border-radius: 8px;
+  background: #238636;
+  color: white;
+  border: none;
+}
+.output {
+  margin-top: 10px;
+  padding: 12px;
+  border: 1px dashed #30363d;
+  white-space: pre-wrap;
+}
+</style>
+</head>
+
+<body>
+
+<div class="container">
+
+<h2>بروتوكول التردد اللغوي v2</h2>
+
+<input id="userKey" type="number" value="123456789">
+
+<textarea id="input"></textarea>
+<button onclick="encode()">Encode</button>
+
+<div class="output" id="out1"></div>
+
+<hr>
+
+<textarea id="inputFreq"></textarea>
+<button onclick="decode()">Decode</button>
+
+<div class="output" id="out2"></div>
+
+</div>
+
+<script>
+
+// ================= CONFIG =================
+const B = 32n;
+const LMAX = 12n;
+const f0 = 100000n;
+const df = 1n;
+const END = 999999999n;
+
+// ================= TABLE =================
+const indexToChar = {
+0:"",1:"ا",2:"ب",3:"ت",4:"ث",5:"ج",6:"ح",7:"خ",
+8:"د",9:"ذ",10:"ر",11:"ز",12:"س",13:"ش",14:"ص",
+15:"ض",16:"ط",17:"ظ",18:"ع",19:"غ",20:"ف",
+21:"ق",22:"ك",23:"ل",24:"م",25:"ن",26:"ه",27:"و",28:"ي"
+};
+
+const charToIndex = {};
+for(const k in indexToChar){
+if(indexToChar[k]) charToIndex[indexToChar[k]] = BigInt(k);
+}
+
+// ================= CLEAN =================
+function cleanText(t){
+return (t||"")
+.replace(/[إأآ]/g,"ا")
+.replace(/ى/g,"ي")
+.replace(/ؤ/g,"و")
+.replace(/ئ/g,"ي")
+.replace(/ة/g,"ه")
+.trim();
+}
+
+// ================= WORD TO CODE =================
+function wordToCode(word){
+let arr = Array(Number(LMAX)).fill(0n);
+let p=0n;
+
+for(let i=word.length-1;i>=0;i--){
+const idx = charToIndex[word[i]];
+if(idx===undefined) continue;
+arr[Number(p++)]=idx;
+if(p>=LMAX) break;
+}
+
+let C=0n;
+for(let i=0n;i<LMAX;i++){
+C += arr[Number(i)]*(B**i);
+}
+return C;
+}
+
+// ================= CODE TO WORD =================
+function codeToWord(C){
+let out="";
+for(let i=0n;i<LMAX;i++){
+let d = C % B;
+C /= B;
+if(d) out = indexToChar[Number(d)] + out;
+}
+return out;
+}
+
+// ================= CRC =================
+function crc(code, seq){
+return (code ^ seq) % 97n;
+}
+
+// ================= ENCODE =================
+function encode(){
+
+const key = BigInt(document.getElementById("userKey").value||0);
+let text = cleanText(document.getElementById("input").value);
+
+let words = text.split(/\s+/);
+
+let stream=[];
+
+let seq=1n;
+
+for(let w of words){
+
+let C = wordToCode(w) ^ key;
+
+let packet = {
+seq: seq,
+data: C,
+crc: crc(C,seq)
+};
+
+let f = f0 + packet.seq + packet.data + packet.crc;
+
+stream.push(f);
+
+seq++;
+}
+
+stream.push(f0 + END);
+
+document.getElementById("out1").textContent = stream.join("\n");
+}
+
+// ================= DECODE =================
+function decode(){
+
+const key = BigInt(document.getElementById("userKey").value||0);
+let lines = document.getElementById("inputFreq").value.trim().split("\n");
+
+let result=[];
+
+for(let l of lines){
+
+let f = BigInt(l.trim());
+
+let raw = f - f0;
+
+if(raw === END) break;
+
+// تفكيك البروتوكول
+let seq = raw % 1000n;
+let rest = raw / 1000n;
+
+let crcVal = rest % 97n;
+let data = rest / 97n;
+
+if(crc(data,seq) !== crcVal) continue;
+
+let C = data ^ key;
+
+let word = codeToWord(C);
+
+result.push(word);
+}
+
+document.getElementById("out2").textContent = result.join(" ");
+}
+
+</script>
+
+</body>
+</html>
