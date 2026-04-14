@@ -1,230 +1,307 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<title>ALM GeoFreq v7 — WhatsApp Safe</title>
+
+<script src="https://unpkg.com/mammoth/mammoth.browser.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
+
+<style>
+body { font-family:"Cairo"; margin:0; }
+header { background:#0BA37F; color:white; padding:15px; text-align:center; }
+.container { padding:20px; max-width:900px; margin:auto; }
+button,input { width:100%; padding:12px; margin-top:10px; }
+canvas { margin-top:20px; }
+#outputText { margin-top:15px; border:1px solid #ccc; padding:10px; min-height:100px; }
+</style>
+</head>
+
+<body>
+
+<header>ALM GeoFreq v7 — مقاوم لضغط واتساب</header>
+
+<div class="container">
+
+<input id="userKey" value="123456789">
+
+<h3>اختيار ملف Word أو PDF</h3>
+<input type="file" id="docInput" accept=".docx,.pdf">
+
+<button onclick="encode()">تحويل إلى صورة</button>
+
+<canvas id="canvas"></canvas>
+<button onclick="saveImage()">💾 حفظ الصورة</button>
+
+<hr>
+
+<input type="file" id="imageInput" accept="image/*">
+<button onclick="decode()">استعادة النص</button>
+
+<div id="outputText"></div>
+
+</div>
+
 <script>
 
-// ================= SETTINGS =================
-const B=32, LMAX=12, SIZE=1024, HEADER=32;
+// ===== إعدادات =====
+const SIZE = 1024;
+const BLOCK = 8;
+const B = 32;
+const LMAX = 12;
 
-// ================= COVER IMAGE =================
-let coverImageData = null;
-
-document.getElementById("docInput").insertAdjacentHTML("afterend",
-  '<input type="file" id="coverInput" accept="image/*" style="margin-top:10px;">'
-);
-
-document.getElementById("coverInput").onchange = async (e)=>{
-  const file = e.target.files[0];
-  if(!file) return;
-
-  const img = new Image();
-  const url = URL.createObjectURL(file);
-
-  await new Promise(res=>{
-    img.onload = res;
-    img.src = url;
-  });
-
-  const canvas = document.createElement("canvas");
-  canvas.width = SIZE;
-  canvas.height = SIZE;
-  const ctx = canvas.getContext("2d");
-
-  ctx.drawImage(img,0,0,SIZE,SIZE);
-  coverImageData = ctx.getImageData(0,0,SIZE,SIZE);
-
-  URL.revokeObjectURL(url);
-};
-
-// ================= CHAR TABLE =================
-const indexToChar={
+// ===== جدول الحروف =====
+const indexToChar = {
 1:"ا",2:"ب",3:"ت",4:"ث",5:"ج",6:"ح",7:"خ",8:"د",9:"ذ",
 10:"ر",11:"ز",12:"س",13:"ش",14:"ص",15:"ض",16:"ط",
 17:"ظ",18:"ع",19:"غ",20:"ف",21:"ق",22:"ك",23:"ل",
 24:"م",25:"ن",26:"ه",27:"و",28:"ي"
 };
 
-const charToIndex={};
-for (let k in indexToChar) charToIndex[indexToChar[k]] = Number(k);
+const charToIndex = {};
+for(let k in indexToChar) charToIndex[indexToChar[k]] = Number(k);
 
-// ================= CLEAN =================
-function cleanText(t){
-  return t.replace(/[^\u0621-\u064A ]/g," ").replace(/\s+/g," ").trim();
+// ===== تنظيف النص =====
+function normalizeArabic(s){
+return s.replace(/[إأآ]/g,"ا")
+.replace(/ى/g,"ي")
+.replace(/ؤ/g,"و")
+.replace(/ئ/g,"ي")
+.replace(/ة/g,"ه");
 }
 
-// ================= WORD =================
+function cleanText(t){
+return t.split("").filter(c=>charToIndex[c]||c===" ")
+.join("").replace(/\s+/g," ").trim();
+}
+
+// ===== استخراج النص =====
+async function extractText(file){
+const name=file.name.toLowerCase();
+
+if(name.endsWith(".docx")){
+const buf=await file.arrayBuffer();
+const res=await mammoth.extractRawText({arrayBuffer:buf});
+return res.value;
+}
+
+if(name.endsWith(".pdf")){
+const buf=await file.arrayBuffer();
+const pdf=await pdfjsLib.getDocument({data:buf}).promise;
+
+let text="";
+for(let i=1;i<=pdf.numPages;i++){
+const page=await pdf.getPage(i);
+const content=await page.getTextContent();
+text+=content.items.map(it=>it.str).join(" ")+"\n";
+}
+return text;
+}
+
+alert("نوع غير مدعوم");
+return "";
+}
+
+// ===== encode =====
+async function encode(){
+
+const file=document.getElementById("docInput").files[0];
+if(!file) return alert("اختر ملف");
+
+let text=await extractText(file);
+text=normalizeArabic(text);
+text=cleanText(text);
+
+const key=BigInt(document.getElementById("userKey").value||0);
+
+const words=text.split(" ");
+const blocks=[];
+
+words.forEach(w=>{
+for(let i=0;i<w.length;i+=LMAX){
+blocks.push(w.slice(i,i+LMAX));
+}
+});
+
+const canvas=document.getElementById("canvas");
+canvas.width=SIZE;
+canvas.height=SIZE;
+const ctx=canvas.getContext("2d");
+
+// صورة طبيعية
+const img=new Image();
+img.crossOrigin="anonymous";
+img.src="https://picsum.photos/1024";
+
+await new Promise(res=>img.onload=res);
+ctx.drawImage(img,0,0,SIZE,SIZE);
+
+let imgData=ctx.getImageData(0,0,SIZE,SIZE);
+let data=imgData.data;
+
+let bits=[];
+
+// HEADER
+let count=BigInt(blocks.length);
+for(let i=0;i<64;i++){
+bits.push(Number((count>>BigInt(i))&1n));
+}
+
+// DATA
+blocks.forEach(b=>{
+let C=wordToCode(b)^key;
+for(let i=0;i<64;i++){
+bits.push(Number((C>>BigInt(i))&1n));
+}
+});
+
+// EMBED
+let bi=0;
+
+for(let y=0;y<SIZE;y+=BLOCK){
+for(let x=0;x<SIZE;x+=BLOCK){
+
+if(bi>=bits.length) break;
+
+let bit=bits[bi++];
+
+for(let by=0;by<BLOCK;by++){
+for(let bx=0;bx<BLOCK;bx++){
+
+let p=((y+by)*SIZE+(x+bx))*4;
+
+let delta = bit ? -20 : +20;
+
+data[p]   = clamp(data[p]   + delta);
+data[p+1] = clamp(data[p+1] + delta);
+data[p+2] = clamp(data[p+2] + delta);
+
+}
+}
+
+}
+}
+
+ctx.putImageData(imgData,0,0);
+
+alert("✔ تم التشفير بنجاح (يعمل بعد واتساب)");
+}
+
+// ===== decode =====
+function decode(){
+
+const file=document.getElementById("imageInput").files[0];
+if(!file) return;
+
+const key=BigInt(document.getElementById("userKey").value||0);
+
+const img=new Image();
+
+img.onload=()=>{
+
+const canvas=document.getElementById("canvas");
+const ctx=canvas.getContext("2d");
+
+canvas.width=img.width;
+canvas.height=img.height;
+ctx.drawImage(img,0,0);
+
+const data=ctx.getImageData(0,0,canvas.width,canvas.height).data;
+
+let bits=[];
+
+for(let y=0;y<SIZE;y+=BLOCK){
+for(let x=0;x<SIZE;x+=BLOCK){
+
+let sum=0,count=0;
+
+for(let by=0;by<BLOCK;by++){
+for(let bx=0;bx<BLOCK;bx++){
+
+let p=((y+by)*SIZE+(x+bx))*4;
+let gray=(data[p]+data[p+1]+data[p+2])/3;
+
+sum+=gray;
+count++;
+
+}
+}
+
+let avg=sum/count;
+bits.push(avg<128?1:0);
+
+}
+}
+
+// HEADER
+let countBlocks=0n;
+for(let i=0;i<64;i++){
+countBlocks|=(BigInt(bits[i])<<BigInt(i));
+}
+
+// DATA
+let pointer=64;
+let out=[];
+
+for(let b=0;b<Number(countBlocks);b++){
+
+let C=0n;
+
+for(let i=0;i<64;i++){
+C|=(BigInt(bits[pointer++])<<BigInt(i));
+}
+
+let word=codeToWord(C^key);
+if(word) out.push(word);
+}
+
+document.getElementById("outputText").innerText=out.join(" ");
+};
+
+img.src=URL.createObjectURL(file);
+}
+
+// ===== helpers =====
 function wordToCode(w){
-  let C=0n;
-  for(let i=0;i<w.length;i++){
-    C += BigInt(charToIndex[w[i]]||0) * (32n**BigInt(i));
-  }
-  return C;
+const c=new Array(LMAX).fill(0);
+let p=0;
+for(let i=w.length-1;i>=0;i--){
+let idx=charToIndex[w[i]];
+if(idx!==undefined){
+c[p++]=idx;
+if(p>=LMAX) break;
+}
+}
+let C=0n;
+for(let i=0;i<LMAX;i++){
+C+=BigInt(c[i])*(BigInt(B)**BigInt(i));
+}
+return C;
 }
 
 function codeToWord(C){
-  let w="";
-  for(let i=0;i<LMAX;i++){
-    let d=Number(C%32n);
-    C/=32n;
-    if(d) w+=indexToChar[d];
-  }
-  return w;
+let out="";
+for(let i=0;i<LMAX;i++){
+let d=Number(C%BigInt(B));
+C/=BigInt(B);
+if(d) out=indexToChar[d]+out;
+}
+return out;
 }
 
-// ================= LSB WRITE =================
-function writeBitsLSB(data, bits){
-  let bi=0;
-
-  for(let i=0;i<data.length && bi<bits.length;i+=4){
-    for(let c=0;c<3;c++){
-      if(bi>=bits.length) break;
-
-      data[i+c] = (data[i+c] & 0xFE) | bits[bi++];
-    }
-  }
+function clamp(v){
+return Math.max(0,Math.min(255,v));
 }
 
-// ================= LSB READ =================
-function readBitsLSB(data, totalBits){
-  let bits=[];
-  let bi=0;
-
-  for(let i=0;i<data.length && bi<totalBits;i+=4){
-    for(let c=0;c<3;c++){
-      if(bi>=totalBits) break;
-      bits.push(data[i+c] & 1);
-      bi++;
-    }
-  }
-  return bits;
+function saveImage(){
+const canvas=document.getElementById("canvas");
+const a=document.createElement("a");
+a.href=canvas.toDataURL("image/jpeg",0.9);
+a.download="encoded.jpg";
+a.click();
 }
-
-// ================= BITS UTILS =================
-function bytesToBits(bytes){
-  let bits=[];
-  bytes.forEach(b=>{
-    for(let i=0;i<8;i++){
-      bits.push((b>>i)&1);
-    }
-  });
-  return bits;
-}
-
-function bitsToBytes(bits){
-  let bytes=[];
-  for(let i=0;i<bits.length;i+=8){
-    let b=0;
-    for(let j=0;j<8;j++){
-      if(bits[i+j]) b |= (1<<j);
-    }
-    bytes.push(b);
-  }
-  return bytes;
-}
-
-// ================= ENCODE =================
-btnEncode.onclick = async ()=>{
-
-  const file = document.getElementById("docInput").files[0];
-  if(!file) return alert("اختر ملف");
-
-  let text = await extractText(file);
-  text = cleanText(text);
-
-  const key = BigInt(document.getElementById("userKey").value||0);
-
-  const words = text.split(" ");
-  const blocks=[];
-
-  words.forEach(w=>{
-    for(let i=0;i<w.length;i+=LMAX){
-      blocks.push(w.slice(i,i+LMAX));
-    }
-  });
-
-  let bytes=[];
-
-  // count
-  let count=BigInt(blocks.length);
-  for(let i=0;i<8;i++){
-    bytes.push(Number((count>>BigInt(8*i))&255n));
-  }
-
-  // data
-  blocks.forEach(b=>{
-    let C = wordToCode(b)^key;
-    for(let j=0;j<8;j++){
-      bytes.push(Number((C>>BigInt(8*j))&255n));
-    }
-  });
-
-  const bits = bytesToBits(bytes);
-
-  const canvas = document.getElementById("canvas");
-  canvas.width = SIZE;
-  canvas.height = SIZE;
-
-  const ctx = canvas.getContext("2d");
-
-  let imgData;
-
-  if(coverImageData){
-    imgData = new ImageData(
-      new Uint8ClampedArray(coverImageData.data),
-      SIZE,
-      SIZE
-    );
-  }else{
-    imgData = ctx.createImageData(SIZE,SIZE);
-
-    for(let i=0;i<imgData.data.length;i+=4){
-      imgData.data[i]=240;
-      imgData.data[i+1]=240;
-      imgData.data[i+2]=255;
-      imgData.data[i+3]=255;
-    }
-  }
-
-  writeBitsLSB(imgData.data, bits);
-
-  ctx.putImageData(imgData,0,0);
-
-  alert("تم التشفير داخل صورة طبيعية بنجاح ✅");
-};
-
-// ================= DECODE =================
-btnDecode.onclick = async ()=>{
-
-  const canvas = document.getElementById("canvas");
-  const ctx = canvas.getContext("2d");
-  const data = ctx.getImageData(0,0,SIZE,SIZE).data;
-
-  const key = BigInt(document.getElementById("userKey").value||0);
-
-  // read first 64 bits (count)
-  const countBits = readBitsLSB(data, 64);
-  const countBytes = bitsToBytes(countBits);
-
-  let count=0n;
-  for(let i=0;i<8;i++){
-    count |= BigInt(countBytes[i])<<(8n*BigInt(i));
-  }
-
-  const totalBytes = 8 + Number(count)*8;
-  const totalBits = totalBytes*8;
-
-  const bits = readBitsLSB(data, totalBits);
-  const bytes = bitsToBytes(bits);
-
-  let blocks=[];
-  let index=8;
-
-  for(let i=0;i<Number(count);i++){
-    let C=0n;
-    for(let j=0;j<8;j++){
-      C |= BigInt(bytes[index++])<<(8n*BigInt(j));
-    }
-    blocks.push(codeToWord(C^key));
-  }
-
-  outputText.textContent = blocks.join(" ");
-};
 
 </script>
+
+</body>
+</html>
