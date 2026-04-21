@@ -1,5 +1,5 @@
-const cacheName = "xx16-alm-v1";
 
+const cacheName = "xx17-alm-v2";
 const filesToCache = [
   "./",
   "./index.html",
