@@ -14,7 +14,7 @@
 
   <header class="app-header">
     <h1>Xx17 – ALM Book / File → Image</h1>
-    <p class="subtitle">منصة ترميز الكتب والملفات إلى صور وقراءتها عبر ALM</p>
+    <p class="subtitle">ترميز الكتب والملفات إلى صور وقراءتها عبر ALM</p>
   </header>
 
   <!-- Tabs -->
@@ -30,19 +30,11 @@
     <section class="tab-panel active" id="tab-encode">
       <h2>ترميز كتاب / ملف → صورة</h2>
 
-      <label>اختر ملفاً (TXT / PDF / Word / EPUB):</label>
+      <label>اختر ملفاً (TXT / PDF / DOCX / ...):</label>
       <input type="file" id="docInput">
 
-      <label>مفتاح المستخدم (اختياري – للحماية):</label>
-      <input type="text" id="userKey" placeholder="User Key">
-
-      <label>مستوى الضغط (تجريبي):</label>
-      <select id="compressLevel">
-        <option value="none">بدون ضغط</option>
-        <option value="light">ضغط خفيف</option>
-        <option value="medium">ضغط متوسط</option>
-        <option value="strong">ضغط قوي</option>
-      </select>
+      <label>مفتاح المستخدم (نصي – وسيلة تبادل بين المستخدمين):</label>
+      <input type="text" id="userKey" placeholder="مثال: USER-BOOK-KEY-123">
 
       <button id="btnEncode">ترميز إلى صورة</button>
 
@@ -64,7 +56,7 @@
       <input type="file" id="imageInput" accept="image/png">
 
       <label>مفتاح المستخدم (إن وجد):</label>
-      <input type="text" id="userKeyDecode" placeholder="User Key">
+      <input type="text" id="userKeyDecode" placeholder="نفس المفتاح المستخدم عند الترميز (للمطابقة فقط حالياً)">
 
       <button id="btnDecode">فك الترميز</button>
 
@@ -98,26 +90,32 @@
           </ul>
         </div>
         <div>
-          <h3>أمان / Integrity</h3>
+          <h3>أمان / سلامة البيانات</h3>
           <ul>
-            <li><strong>CRC:</strong> <span id="metaCRC">—</span></li>
+            <li><strong>CRC32:</strong> <span id="metaCRC">—</span></li>
             <li><strong>حالة CRC:</strong> <span id="metaCRCStatus">—</span></li>
             <li><strong>مفتاح المستخدم:</strong> <span id="metaUserKey">—</span></li>
             <li><strong>نسخة الترميز:</strong> <span id="metaVersion">Xx17-ALM-1.0</span></li>
           </ul>
         </div>
+        <div>
+          <h3>توقيت الترميز</h3>
+          <ul>
+            <li><strong>Timestamp (خام):</strong> <span id="metaTimestampRaw">—</span></li>
+            <li><strong>تاريخ/وقت تقريبي:</strong> <span id="metaTimestampHuman">—</span></li>
+          </ul>
+        </div>
       </div>
 
       <p class="hint">
-        سيتم ملء هذه المعلومات تلقائياً بعد عملية الترميز أو فك الترميز في الإصدارات القادمة من Xx17.
+        يتم ملء هذه المعلومات تلقائياً بعد عملية الترميز أو فك الترميز.
       </p>
     </section>
 
   </main>
 
-  <!-- Tabs logic + existing script -->
+  <!-- Tabs logic -->
   <script>
-    // تبديل التبويبات
     const tabs = document.querySelectorAll(".tab");
     const panels = document.querySelectorAll(".tab-panel");
 
