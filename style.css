@@ -1,6 +1,6 @@
-/* ===========================
-   Xx16 ALM – STYLE SHEET
-   =========================== */
+/* ============================
+   Xx17 ALM – STYLE SHEET
+   ============================ */
 
 body {
   font-family: "Tahoma", sans-serif;
@@ -14,8 +14,16 @@ body {
 
 h1 {
   text-align: center;
-  margin-bottom: 25px;
+  margin-bottom: 10px;
   color: #000;
+}
+
+.app-header .subtitle {
+  text-align: center;
+  margin-top: -5px;
+  margin-bottom: 20px;
+  color: #555;
+  font-size: 14px;
 }
 
 section {
@@ -52,11 +60,11 @@ select {
 button {
   background: #0078ff;
   color: white;
-  padding: 12px 18px;
+  padding: 10px 16px;
   border: none;
   border-radius: 6px;
   cursor: pointer;
-  font-size: 15px;
+  font-size: 14px;
   transition: 0.2s;
 }
 
@@ -85,16 +93,8 @@ canvas {
   border: 1px solid #ccc;
   max-width: 100%;
 }
-.app-header {
-  text-align: center;
-  margin-bottom: 20px;
-}
 
-.app-header .subtitle {
-  margin-top: -8px;
-  color: #555;
-  font-size: 14px;
-}
+/* Tabs */
 
 .tabs {
   display: flex;
