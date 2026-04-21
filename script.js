@@ -4,17 +4,31 @@ const ALM_CMD_DECODE = 102;   // فك صورة → ملف
 const ALM_CMD_EXPORT = 103;   // تصدير الملف المسترجع
 
 // ================= UI BINDINGS =================
-const docInput     = document.getElementById("docInput");
-const imageInput   = document.getElementById("imageInput");
-const userKeyEl    = document.getElementById("userKey");
-const exportModeEl = document.getElementById("exportMode");
-const canvas       = document.getElementById("canvas");
-const statusEncode = document.getElementById("statusEncode");
-const statusDecode = document.getElementById("statusDecode");
-const outputText   = document.getElementById("outputText");
+const docInput       = document.getElementById("docInput");
+const imageInput     = document.getElementById("imageInput");
+const userKeyEl      = document.getElementById("userKey");
+const userKeyDecodeEl= document.getElementById("userKeyDecode");
+const exportModeEl   = document.getElementById("exportMode");
+const canvas         = document.getElementById("canvas");
+const statusEncode   = document.getElementById("statusEncode");
+const statusDecode   = document.getElementById("statusDecode");
+const outputText     = document.getElementById("outputText");
+
+// Metadata elements
+const metaFilenameEl     = document.getElementById("metaFilename");
+const metaFiletypeEl     = document.getElementById("metaFiletype");
+const metaFilesizeEl     = document.getElementById("metaFilesize");
+const metaPartsEl        = document.getElementById("metaParts");
+const metaCRCEl          = document.getElementById("metaCRC");
+const metaCRCStatusEl    = document.getElementById("metaCRCStatus");
+const metaUserKeyEl      = document.getElementById("metaUserKey");
+const metaTimestampRawEl = document.getElementById("metaTimestampRaw");
+const metaTimestampHumanEl = document.getElementById("metaTimestampHuman");
 
 // تخزين عالمي للبيانات المسترجعة للتصدير
 window._decodedBytes = null;
+
+// ================= BUTTON HANDLERS =================
 
 document.getElementById("btnEncode").onclick = () => {
   const file    = docInput.files[0];
@@ -24,7 +38,7 @@ document.getElementById("btnEncode").onclick = () => {
 
 document.getElementById("btnDecode").onclick = () => {
   const image   = imageInput.files[0];
-  const userKey = userKeyEl.value;
+  const userKey = userKeyDecodeEl ? userKeyDecodeEl.value : "";
   runALM(ALM_CMD_DECODE, { image, userKey });
 };
 
@@ -32,6 +46,21 @@ document.getElementById("btnExport").onclick = () => {
   const mode = exportModeEl.value;
   runALM(ALM_CMD_EXPORT, { mode });
 };
+
+// زر حفظ الصورة من الـ Canvas
+const btnSaveImage = document.getElementById("btnSaveImage");
+if (btnSaveImage) {
+  btnSaveImage.onclick = () => {
+    if (!canvas) return;
+    const url = canvas.toDataURL("image/png");
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "xx17_encoded.png";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  };
+}
 
 // ================= ALM ENGINE =================
 function runALM(cmdId, payload = {}) {
@@ -45,6 +74,20 @@ function runALM(cmdId, payload = {}) {
     default:
       console.warn("Unknown ALM command:", cmdId);
   }
+}
+
+// ================= HELPERS: CRC32 =================
+function crc32(bytes) {
+  let crc = 0 ^ (-1);
+  for (let i = 0; i < bytes.length; i++) {
+    let c = (crc ^ bytes[i]) & 0xFF;
+    for (let j = 0; j < 8; j++) {
+      if (c & 1) c = (c >>> 1) ^ 0xEDB88320;
+      else c = c >>> 1;
+    }
+    crc = (crc >>> 8) ^ c;
+  }
+  return (crc ^ (-1)) >>> 0;
 }
 
 // ================= ALM LOGIC =================
@@ -63,10 +106,24 @@ function almEncodeFile({ file, userKey }) {
     const arrayBuffer = e.target.result;
     const bytes = new Uint8Array(arrayBuffer);
 
-    const almStream = buildSimpleALMStream(bytes, userKey);
+    const filename = file.name || "file.bin";
+    const almStream = buildALMStreamWithHeader(bytes, userKey, filename);
 
     drawALMStreamToCanvas(almStream);
     statusEncode.textContent = "تم الترميز داخل الصورة.";
+
+    // تعبئة بعض الميتاداتا مباشرة بعد الترميز
+    if (metaFilenameEl) metaFilenameEl.textContent = filename;
+    if (metaFiletypeEl) {
+      const dotIdx = filename.lastIndexOf(".");
+      let ft = "bin";
+      if (dotIdx !== -1 && dotIdx < filename.length - 1) {
+        ft = filename.slice(dotIdx + 1).toLowerCase();
+      }
+      metaFiletypeEl.textContent = ft;
+    }
+    if (metaFilesizeEl) metaFilesizeEl.textContent = bytes.length + " بايت";
+    if (metaUserKeyEl) metaUserKeyEl.textContent = String(userKey || "—");
   };
 
   reader.onerror = function() {
@@ -107,12 +164,17 @@ function almDecodeImage({ image, userKey }) {
       return;
     }
 
-    const { bytes, key, crcOk } = result;
+    const { bytes, key, crcOk, meta } = result;
 
     if (!crcOk) {
       statusDecode.textContent = "تحذير: CRC غير مطابق. قد تكون البيانات تالفة.";
     } else {
       statusDecode.textContent = "تم فك الترميز بنجاح.";
+    }
+
+    // مقارنة مفتاح المستخدم (اختياري حالياً – تحذير فقط)
+    if (userKey && key && userKey !== key) {
+      statusDecode.textContent += " (تحذير: مفتاح المستخدم لا يطابق المفتاح الأصلي)";
     }
 
     // عرض كنص إن أمكن
@@ -125,6 +187,26 @@ function almDecodeImage({ image, userKey }) {
     }
 
     window._decodedBytes = bytes;
+
+    // تعبئة الميتاداتا من meta
+    if (meta) {
+      if (metaFiletypeEl) metaFiletypeEl.textContent = meta.filetype || "غير معروف";
+      if (metaFilesizeEl) metaFilesizeEl.textContent = meta.filesize + " بايت";
+      if (metaPartsEl) metaPartsEl.textContent = "1";
+      if (metaCRCEl) metaCRCEl.textContent = "0x" + meta.crcStored.toString(16).toUpperCase();
+      if (metaCRCStatusEl) metaCRCStatusEl.textContent = crcOk ? "سليم" : "غير مطابق";
+      if (metaUserKeyEl) metaUserKeyEl.textContent = meta.key || "—";
+      if (metaTimestampRawEl) metaTimestampRawEl.textContent = meta.timestamp;
+
+      if (metaTimestampHumanEl) {
+        try {
+          const d = new Date(meta.timestamp * 1000);
+          metaTimestampHumanEl.textContent = d.toLocaleString("ar-EG");
+        } catch {
+          metaTimestampHumanEl.textContent = "غير متوفر";
+        }
+      }
+    }
   };
 
   img.onerror = function() {
@@ -154,88 +236,173 @@ function almExportFile({ mode }) {
 
   const a = document.createElement("a");
   a.href = url;
-  a.download = "xx16_output." + ext;
+  a.download = "xx17_output." + ext;
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
 }
 
-// ================= HELPERS =================
+// ================= ALM STREAM WITH HEADER (B) =================
 
-// بناء ALM Stream بسيط (رأس + CRC + مفتاح + بيانات)
-function buildSimpleALMStream(bytes, userKey) {
-  const keyStr = String(userKey || "0");
+// Header B:
+// magic "ALM" (3)
+// version (1)
+// filetypeLen (1) + filetype
+// filesize (4)
+// timestamp (4)
+// keyLen (1) + key (نصي كما طلبت)
+// crc32 (4)
+// ثم data
 
-  let crc = 0;
-  for (let i = 0; i < bytes.length; i++) {
-    crc = (crc + bytes[i]) & 0xFF;
+function buildALMStreamWithHeader(bytes, userKey, filename = "file.bin") {
+  const encoder = new TextEncoder();
+
+  // استنتاج نوع الملف من الاسم
+  let filetype = "bin";
+  const dotIdx = filename.lastIndexOf(".");
+  if (dotIdx !== -1 && dotIdx < filename.length - 1) {
+    filetype = filename.slice(dotIdx + 1).toLowerCase();
   }
 
-  const encoder = new TextEncoder();
-  const keyBytes = encoder.encode(keyStr);
+  const magic = encoder.encode("ALM"); // 3 بايت
+  const version = 1;                   // 1 بايت
+  const filetypeBytes = encoder.encode(filetype);
+  const filetypeLen = filetypeBytes.length & 0xFF;
 
-  const totalLen = 4 + 1 + 1 + keyBytes.length + bytes.length;
+  const filesize = bytes.length >>> 0; // 4 بايت
+  const timestamp = Math.floor(Date.now() / 1000) >>> 0; // 4 بايت
+
+  const keyStr = String(userKey || "");
+  const keyBytes = encoder.encode(keyStr);
+  const keyLen = keyBytes.length & 0xFF;
+
+  const crc = crc32(bytes); // 4 بايت
+
+  const headerLen =
+    3 + 1 + 1 + filetypeBytes.length + 4 + 4 + 1 + keyBytes.length + 4;
+
+  const totalLen = headerLen + bytes.length;
   const out = new Uint8Array(totalLen);
   let offset = 0;
 
-  const len = bytes.length;
-  out[offset++] = (len >>> 24) & 0xFF;
-  out[offset++] = (len >>> 16) & 0xFF;
-  out[offset++] = (len >>> 8)  & 0xFF;
-  out[offset++] = (len)        & 0xFF;
+  // magic
+  out.set(magic, offset);
+  offset += 3;
 
-  out[offset++] = crc & 0xFF;
+  // version
+  out[offset++] = version & 0xFF;
 
-  out[offset++] = keyBytes.length & 0xFF;
+  // filetypeLen + filetype
+  out[offset++] = filetypeLen;
+  out.set(filetypeBytes, offset);
+  offset += filetypeBytes.length;
 
+  // filesize (4 بايت big-endian)
+  out[offset++] = (filesize >>> 24) & 0xFF;
+  out[offset++] = (filesize >>> 16) & 0xFF;
+  out[offset++] = (filesize >>> 8) & 0xFF;
+  out[offset++] = (filesize) & 0xFF;
+
+  // timestamp (4 بايت big-endian)
+  out[offset++] = (timestamp >>> 24) & 0xFF;
+  out[offset++] = (timestamp >>> 16) & 0xFF;
+  out[offset++] = (timestamp >>> 8) & 0xFF;
+  out[offset++] = (timestamp) & 0xFF;
+
+  // keyLen + key
+  out[offset++] = keyLen;
   out.set(keyBytes, offset);
   offset += keyBytes.length;
 
+  // crc32 (4 بايت big-endian)
+  out[offset++] = (crc >>> 24) & 0xFF;
+  out[offset++] = (crc >>> 16) & 0xFF;
+  out[offset++] = (crc >>> 8) & 0xFF;
+  out[offset++] = (crc) & 0xFF;
+
+  // data
   out.set(bytes, offset);
 
   return out;
 }
 
-// فك ALM Stream واسترجاع البيانات
+// فك ALM Stream واسترجاع البيانات + Metadata
 function parseALMStream(stream) {
+  const decoder = new TextDecoder();
   let offset = 0;
 
-  const len =
+  if (stream.length < 3) {
+    return { ok: false, error: "Stream قصير جداً." };
+  }
+
+  const magic = decoder.decode(stream.slice(0, 3));
+  if (magic !== "ALM") {
+    return { ok: false, error: "ترويسة ALM غير صحيحة." };
+  }
+  offset += 3;
+
+  const version = stream[offset++];
+
+  const filetypeLen = stream[offset++];
+  if (offset + filetypeLen > stream.length) {
+    return { ok: false, error: "طول نوع الملف غير صالح." };
+  }
+  const filetype = decoder.decode(stream.slice(offset, offset + filetypeLen));
+  offset += filetypeLen;
+
+  if (offset + 4 > stream.length) {
+    return { ok: false, error: "لا يوجد مساحة كافية لطول الملف." };
+  }
+  const filesize =
     (stream[offset++] << 24) |
     (stream[offset++] << 16) |
-    (stream[offset++] << 8)  |
+    (stream[offset++] << 8) |
     (stream[offset++]);
 
-  if (len <= 0 || len > stream.length) {
-    return { ok: false, error: "طول البيانات غير صالح." };
+  if (offset + 4 > stream.length) {
+    return { ok: false, error: "لا يوجد مساحة كافية للتوقيت." };
   }
-
-  const crcStored = stream[offset++];
+  const timestamp =
+    (stream[offset++] << 24) |
+    (stream[offset++] << 16) |
+    (stream[offset++] << 8) |
+    (stream[offset++]);
 
   const keyLen = stream[offset++];
-  if (keyLen < 0 || keyLen > 64) {
+  if (offset + keyLen > stream.length) {
     return { ok: false, error: "طول المفتاح غير صالح." };
   }
-
-  const keyBytes = stream.slice(offset, offset + keyLen);
+  const key = decoder.decode(stream.slice(offset, offset + keyLen));
   offset += keyLen;
 
-  const decoder = new TextDecoder();
-  const key = decoder.decode(keyBytes);
-
-  const bytes = stream.slice(offset, offset + len);
-
-  let crcCalc = 0;
-  for (let i = 0; i < bytes.length; i++) {
-    crcCalc = (crcCalc + bytes[i]) & 0xFF;
+  if (offset + 4 > stream.length) {
+    return { ok: false, error: "لا يوجد مساحة كافية لـ CRC." };
   }
+  const crcStored =
+    ((stream[offset++] << 24) |
+     (stream[offset++] << 16) |
+     (stream[offset++] << 8) |
+     (stream[offset++])) >>> 0;
+
+  const bytes = stream.slice(offset);
+  const crcCalc = crc32(bytes);
+  const crcOk = crcCalc === crcStored;
 
   return {
     ok: true,
     bytes,
     key,
-    crcOk: crcCalc === crcStored
+    crcOk,
+    meta: {
+      version,
+      filetype,
+      filesize,
+      timestamp,
+      key,
+      crcStored,
+      crcCalc
+    }
   };
 }
 
@@ -262,18 +429,4 @@ function drawALMStreamToCanvas(almStream) {
   }
 
   ctx.putImageData(imageData, 0, 0);
-}
-// زر حفظ الصورة من الـ Canvas
-const btnSaveImage = document.getElementById("btnSaveImage");
-if (btnSaveImage) {
-  btnSaveImage.onclick = () => {
-    if (!canvas) return;
-    const url = canvas.toDataURL("image/png");
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "xx17_encoded.png";
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-  };
 }
