@@ -2,27 +2,23 @@
 <html lang="ar" dir="rtl">
 <head>
   <meta charset="UTF-8">
-  <title>Xx17 – ALM GeoFreq v6</title>
+  <title>Xx16‑ALM Metadata Edition</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="stylesheet" href="style.css">
 </head>
 
 <body>
 
-  <h2 class="title">ALM GeoFreq v6 — File → Image → File</h2>
+  <h2 class="title">Xx16‑ALM — File → Image → File</h2>
 
-  <!-- ENCODE SECTION -->
+  <!-- ENCODE -->
   <section class="box">
     <h3>ترميز</h3>
 
     <label>مفتاح المستخدم (نصي):</label>
     <input type="text" id="userKey" placeholder="مثال: USER-KEY-123">
 
-    <p class="note">
-      سيتم ترميز محتوى الملف داخل صورة PNG مع CRC32 لاكتشاف تلف البيانات.
-    </p>
-
-    <label>اختيار ملف Word أو PDF → صورة:</label>
+    <label>اختيار ملف Word أو PDF أو نص:</label>
     <input type="file" id="docInput">
 
     <button id="btnEncode">تحويل إلى صورة</button>
@@ -33,30 +29,32 @@
     <canvas id="canvas"></canvas>
   </section>
 
-  <!-- DECODE SECTION -->
+  <!-- DECODE -->
   <section class="box">
     <h3>استعادة</h3>
 
-    <label>اختيار صورة PNG → نص/ملف:</label>
+    <label>اختيار صورة PNG:</label>
     <input type="file" id="imageInput" accept="image/png">
 
-    <button id="btnDecode">استعادة النص</button>
+    <button id="btnDecode">استعادة</button>
+
+    <h4>البيانات المستخرجة:</h4>
+    <div id="metaBox" class="metaBox"></div>
 
     <label>الناتج كنص:</label>
     <textarea id="outputText" readonly></textarea>
 
-    <label>نوع الإخراج بعد فك الترميز:</label>
+    <label>تنزيل الملف:</label>
     <select id="exportMode">
       <option value="bin">ملف ثنائي (BIN)</option>
       <option value="txt">نص (TXT)</option>
     </select>
 
-    <button id="btnExport">تنزيل الملف</button>
+    <button id="btnExport">تنزيل</button>
 
     <p id="statusDecode" class="status"></p>
   </section>
 
-  <!-- FOOTER -->
   <footer>
     © 2026 — <strong>Developer: Eng. رأفت عمر</strong>
   </footer>
