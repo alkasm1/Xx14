@@ -1,5 +1,5 @@
 /****************************************************
- * Xx16‑ALM — Metadata Edition
+ * Xx16‑ALM — Text/Image System (Final Version)
  * ترميز Xx16 الأصلي + دعم الهمزة + ALM Header + CRC32
  ****************************************************/
 
@@ -8,12 +8,12 @@ const ALPHABET = "ابتثجحخدذرزسشصضطظعغفقكلمنهوي012345
 
 function encodeChar(ch) {
   const idx = ALPHABET.indexOf(ch);
-  return idx === -1 ? 255 : idx; // 255 = حرف غير موجود
+  return idx === -1 ? 255 : idx;
 }
 
 function decodeChar(code) {
   if (code >= 0 && code < ALPHABET.length) return ALPHABET[code];
-  return ""; // تجاهل الرموز غير المعروفة
+  return "";
 }
 
 function encodeText(str) {
@@ -129,7 +129,9 @@ function parseALM(stream) {
      (stream[o++] << 8) |
      stream[o++]) >>> 0;
 
-  const bytes = stream.slice(o);
+  const bytesAll = stream.slice(o);
+  const bytes = bytesAll.slice(0, filesize);
+
   const crcCalc = crc32(bytes);
 
   return {
@@ -159,9 +161,9 @@ function encodeToCanvas(bytes) {
   for (let i = 0; i < SIZE * SIZE; i++) {
     const b = bytes[i] || 0;
     const p = i * 4;
-    d[p] = b;     // R
-    d[p + 1] = 0; // G
-    d[p + 2] = 0; // B
+    d[p] = b;
+    d[p + 1] = 0;
+    d[p + 2] = 0;
     d[p + 3] = 255;
   }
 
@@ -186,38 +188,51 @@ function decodeFromCanvas(img) {
 }
 
 // ===================== UI =====================
-const docInput = document.getElementById("docInput");
+const textBox = document.getElementById("textBox");
+const fileInput = document.getElementById("fileInput");
 const imageInput = document.getElementById("imageInput");
 const userKeyEl = document.getElementById("userKey");
 const outputText = document.getElementById("outputText");
-const exportModeEl = document.getElementById("exportMode");
 const metaBox = document.getElementById("metaBox");
 
 let decodedBytes = null;
+let decodedFiletype = null;
+
+// ===================== استخراج النص من ملف =====================
+document.getElementById("btnExtract").onclick = () => {
+  const file = fileInput.files[0];
+  if (!file) return alert("اختر ملفاً أولاً");
+
+  const ext = file.name.split(".").pop().toLowerCase();
+
+  if (ext === "txt") {
+    const reader = new FileReader();
+    reader.onload = e => {
+      textBox.value = e.target.result;
+    };
+    reader.readAsText(file, "utf-8");
+  } else {
+    alert("لا يمكن استخراج نص من هذا النوع. سيتم حفظه كملف فقط.");
+  }
+};
 
 // ===================== ENCODE =====================
 document.getElementById("btnEncode").onclick = () => {
-  const file = docInput.files[0];
-  if (!file) return alert("اختر ملفاً أولاً");
+  const text = textBox.value.trim();
+  if (!text) return alert("أدخل نصاً أولاً");
 
-  const reader = new FileReader();
-  reader.onload = e => {
-    const raw = new Uint8Array(e.target.result);
+  const encoded = encodeText(text);
+  const alm = buildALM(encoded, userKeyEl.value, "txt");
 
-    const ext = file.name.split(".").pop().toLowerCase();
-    const alm = buildALM(raw, userKeyEl.value, ext);
-
-    encodeToCanvas(alm);
-    document.getElementById("statusEncode").textContent = "تم الترميز داخل الصورة.";
-  };
-  reader.readAsArrayBuffer(file);
+  encodeToCanvas(alm);
+  document.getElementById("statusEncode").textContent = "تم تحويل النص إلى صورة.";
 };
 
 // ===================== SAVE IMAGE =====================
 document.getElementById("btnSaveImage").onclick = () => {
   const a = document.createElement("a");
   a.href = canvas.toDataURL("image/png");
-  a.download = "alm_encoded.png";
+  a.download = "alm_text.png";
   a.click();
 };
 
@@ -237,8 +252,8 @@ document.getElementById("btnDecode").onclick = () => {
     }
 
     decodedBytes = result.bytes;
+    decodedFiletype = result.filetype;
 
-    // ====== عرض Metadata ======
     metaBox.textContent =
       "نوع الملف: " + result.filetype +
       "\nالحجم: " + result.filesize + " بايت" +
@@ -246,22 +261,13 @@ document.getElementById("btnDecode").onclick = () => {
       "\nالمفتاح: " + (result.key || "بدون مفتاح") +
       "\nالوقت: " + new Date(result.timestamp * 1000).toLocaleString("ar-EG");
 
-    // ====== محاولة عرض النص ======
-    let text = "";
-    let isText = false;
+    if (result.filetype === "txt") {
+      outputText.value = decodeText(result.bytes);
+    } else {
+      outputText.value = "تم استخراج ملف غير نصي.\nيمكنك تنزيله.";
+    }
 
-    try {
-      text = decodeText(result.bytes);
-      if (text.trim().length > 0) {
-        outputText.value = text;
-        isText = true;
-      }
-    } catch {}
-
-    if (!isText)
-      outputText.value = "تم استخراج ملف غير نصي.\nيمكنك تنزيله من زر (تنزيل).";
-
-    document.getElementById("statusDecode").textContent = "تم فك الترميز.";
+    document.getElementById("statusDecode").textContent = "تم الاسترجاع.";
   };
 
   img.src = URL.createObjectURL(file);
@@ -271,18 +277,9 @@ document.getElementById("btnDecode").onclick = () => {
 document.getElementById("btnExport").onclick = () => {
   if (!decodedBytes) return alert("لا يوجد ملف مسترجع");
 
-  const mode = exportModeEl.value;
-  let mime = "application/octet-stream";
-  let ext = "bin";
-
-  if (mode === "txt") {
-    mime = "text/plain";
-    ext = "txt";
-  }
-
-  const blob = new Blob([decodedBytes], { type: mime });
+  const blob = new Blob([decodedBytes], { type: "application/octet-stream" });
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob);
-  a.download = "output." + ext;
+  a.download = "output." + decodedFiletype;
   a.click();
 };
