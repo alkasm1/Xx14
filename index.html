@@ -2,26 +2,36 @@
 <html lang="ar" dir="rtl">
 <head>
   <meta charset="UTF-8">
-  <title>Xx16‑ALM Metadata Edition</title>
+  <title>Xx16‑ALM — Text/Image System</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="stylesheet" href="style.css">
 </head>
 
 <body>
 
-  <h2 class="title">Xx16‑ALM — File → Image → File</h2>
+  <h2 class="title">Xx16‑ALM — Text ↔ Image</h2>
+
+  <!-- TEXT INPUT -->
+  <section class="box">
+    <h3>النص</h3>
+
+    <label>أدخل النص هنا أو قم بتحميل ملف لاستخراج النص:</label>
+    <textarea id="textBox" placeholder="اكتب النص هنا..."></textarea>
+
+    <label>تحميل ملف TXT / PDF / DOCX:</label>
+    <input type="file" id="fileInput">
+
+    <button id="btnExtract">استخراج النص من الملف</button>
+  </section>
 
   <!-- ENCODE -->
   <section class="box">
-    <h3>ترميز</h3>
+    <h3>تحويل النص إلى صورة</h3>
 
-    <label>مفتاح المستخدم (نصي):</label>
+    <label>مفتاح المستخدم (اختياري):</label>
     <input type="text" id="userKey" placeholder="مثال: USER-KEY-123">
 
-    <label>اختيار ملف Word أو PDF أو نص:</label>
-    <input type="file" id="docInput">
-
-    <button id="btnEncode">تحويل إلى صورة</button>
+    <button id="btnEncode">تحويل النص إلى صورة</button>
     <button id="btnSaveImage" class="save">💾 حفظ الصورة</button>
 
     <p id="statusEncode" class="status">جاهز.</p>
@@ -31,26 +41,20 @@
 
   <!-- DECODE -->
   <section class="box">
-    <h3>استعادة</h3>
+    <h3>استرجاع من صورة</h3>
 
     <label>اختيار صورة PNG:</label>
     <input type="file" id="imageInput" accept="image/png">
 
-    <button id="btnDecode">استعادة</button>
+    <button id="btnDecode">استرجاع</button>
 
     <h4>البيانات المستخرجة:</h4>
     <div id="metaBox" class="metaBox"></div>
 
-    <label>الناتج كنص:</label>
+    <label>النص المسترجع:</label>
     <textarea id="outputText" readonly></textarea>
 
-    <label>تنزيل الملف:</label>
-    <select id="exportMode">
-      <option value="bin">ملف ثنائي (BIN)</option>
-      <option value="txt">نص (TXT)</option>
-    </select>
-
-    <button id="btnExport">تنزيل</button>
+    <button id="btnExport">تنزيل الملف الأصلي</button>
 
     <p id="statusDecode" class="status"></p>
   </section>
