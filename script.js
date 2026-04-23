@@ -1,10 +1,10 @@
 /****************************************************
- * Xx16‑ALM — Text/Image System (Final Version)
- * ترميز Xx16 الأصلي + دعم الهمزة + ALM Header + CRC32
+ * Xx16‑ALM — Text/Image System (DOCX + PDF + Arabic)
  ****************************************************/
 
 // ===================== جدول الترميز =====================
-const ALPHABET = "ابتثجحخدذرزسشصضطظعغفقكلمنهوي0123456789.،!؟- ءأإآؤئ";
+// ترتيب A: الحروف العربية الأساسية ثم (ة، ى) ثم الأرقام ثم الترقيم ثم المسافة ثم الهمزات
+const ALPHABET = "ابتثجحخدذرزسشصضطظعغفقكلمنهويةى0123456789.،!؟- ءأإآؤئ";
 
 function encodeChar(ch) {
   const idx = ALPHABET.indexOf(ch);
@@ -187,7 +187,7 @@ function decodeFromCanvas(img) {
   return out;
 }
 
-// ===================== UI =====================
+// ===================== UI عناصر =====================
 const textBox = document.getElementById("textBox");
 const fileInput = document.getElementById("fileInput");
 const imageInput = document.getElementById("imageInput");
@@ -199,7 +199,7 @@ let decodedBytes = null;
 let decodedFiletype = null;
 
 // ===================== استخراج النص من ملف =====================
-document.getElementById("btnExtract").onclick = () => {
+document.getElementById("btnExtract").onclick = async () => {
   const file = fileInput.files[0];
   if (!file) return alert("اختر ملفاً أولاً");
 
@@ -211,12 +211,43 @@ document.getElementById("btnExtract").onclick = () => {
       textBox.value = e.target.result;
     };
     reader.readAsText(file, "utf-8");
+  } else if (ext === "docx") {
+    // DOCX = ZIP → نستخدم JSZip
+    const arrayBuffer = await file.arrayBuffer();
+    const zip = await JSZip.loadAsync(arrayBuffer);
+    const docXml = await zip.file("word/document.xml").async("string");
+
+    // استخراج النص من XML
+    let text = docXml
+      .replace(/<w:p[^>]*>/g, "\n")   // فقرة جديدة
+      .replace(/<[^>]+>/g, "")        // إزالة كل الوسوم
+      .replace(/&amp;/g, "&")
+      .replace(/&lt;/g, "<")
+      .replace(/&gt;/g, ">")
+      .replace(/&quot;/g, "\"")
+      .replace(/&apos;/g, "'");
+
+    textBox.value = text.trim();
+  } else if (ext === "pdf") {
+    // PDF → نستخدم pdf.js
+    const arrayBuffer = await file.arrayBuffer();
+    const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+
+    let fullText = "";
+    for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
+      const page = await pdf.getPage(pageNum);
+      const content = await page.getTextContent();
+      const strings = content.items.map(it => it.str);
+      fullText += strings.join(" ") + "\n";
+    }
+
+    textBox.value = fullText.trim();
   } else {
-    alert("لا يمكن استخراج نص من هذا النوع. سيتم حفظه كملف فقط.");
+    alert("لا يمكن استخراج نص من هذا النوع. يدعم TXT / DOCX / PDF فقط.");
   }
 };
 
-// ===================== ENCODE =====================
+// ===================== ENCODE النص → صورة =====================
 document.getElementById("btnEncode").onclick = () => {
   const text = textBox.value.trim();
   if (!text) return alert("أدخل نصاً أولاً");
@@ -224,11 +255,16 @@ document.getElementById("btnEncode").onclick = () => {
   const encoded = encodeText(text);
   const alm = buildALM(encoded, userKeyEl.value, "txt");
 
+  if (alm.length > SIZE * SIZE) {
+    alert("النص طويل جداً ولا يمكن وضعه في صورة واحدة 1024×1024.");
+    return;
+  }
+
   encodeToCanvas(alm);
   document.getElementById("statusEncode").textContent = "تم تحويل النص إلى صورة.";
 };
 
-// ===================== SAVE IMAGE =====================
+// ===================== حفظ الصورة =====================
 document.getElementById("btnSaveImage").onclick = () => {
   const a = document.createElement("a");
   a.href = canvas.toDataURL("image/png");
@@ -236,7 +272,7 @@ document.getElementById("btnSaveImage").onclick = () => {
   a.click();
 };
 
-// ===================== DECODE =====================
+// ===================== DECODE من صورة =====================
 document.getElementById("btnDecode").onclick = () => {
   const file = imageInput.files[0];
   if (!file) return alert("اختر صورة أولاً");
@@ -264,7 +300,7 @@ document.getElementById("btnDecode").onclick = () => {
     if (result.filetype === "txt") {
       outputText.value = decodeText(result.bytes);
     } else {
-      outputText.value = "تم استخراج ملف غير نصي.\nيمكنك تنزيله.";
+      outputText.value = "تم استخراج ملف غير نصي.\nيمكنك تنزيله من زر (تنزيل الملف الأصلي).";
     }
 
     document.getElementById("statusDecode").textContent = "تم الاسترجاع.";
@@ -273,13 +309,13 @@ document.getElementById("btnDecode").onclick = () => {
   img.src = URL.createObjectURL(file);
 };
 
-// ===================== EXPORT =====================
+// ===================== تنزيل الملف الأصلي =====================
 document.getElementById("btnExport").onclick = () => {
   if (!decodedBytes) return alert("لا يوجد ملف مسترجع");
 
   const blob = new Blob([decodedBytes], { type: "application/octet-stream" });
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob);
-  a.download = "output." + decodedFiletype;
+  a.download = "output." + (decodedFiletype || "bin");
   a.click();
 };
