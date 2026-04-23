@@ -71,6 +71,15 @@ canvas {
   max-width: 100%;
 }
 
+.metaBox {
+  background: #eef;
+  padding: 10px;
+  border-radius: 6px;
+  margin-bottom: 10px;
+  font-size: 14px;
+  white-space: pre-line;
+}
+
 footer {
   text-align: center;
   margin-top: 25px;
