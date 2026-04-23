@@ -302,6 +302,38 @@ document.getElementById("btnDecode").onclick = () => {
     } else {
       outputText.value = "تم استخراج ملف غير نصي.\nيمكنك تنزيله من زر (تنزيل الملف الأصلي).";
     }
+    document.getElementById("btnExportWord").onclick = async () => {
+  const text = outputText.value.trim();
+  if (!text) return alert("لا يوجد نص لتحويله إلى Word");
+
+  const { Document, Packer, Paragraph } = docx;
+
+  const doc = new Document({
+    sections: [{
+      properties: {},
+      children: [new Paragraph(text)],
+    }],
+  });
+
+  const blob = await Packer.toBlob(doc);
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "restored.docx";
+  a.click();
+};
+    document.getElementById("btnExportPDF").onclick = () => {
+  const text = outputText.value.trim();
+  if (!text) return alert("لا يوجد نص لتحويله إلى PDF");
+
+  const { jsPDF } = window.jspdf;
+  const pdf = new jsPDF();
+
+  const lines = pdf.splitTextToSize(text, 180);
+  pdf.text(lines, 15, 15);
+
+  pdf.save("restored.pdf");
+};
+    
 
     document.getElementById("statusDecode").textContent = "تم الاسترجاع.";
   };
