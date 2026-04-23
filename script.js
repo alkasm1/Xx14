@@ -198,11 +198,23 @@ document.getElementById("btnDecode").onclick = () => {
     }
 
     window._decodedBytes = result.bytes;
+// محاولة قراءة النص فقط إذا كان الملف نصيًا
+let text = "";
+let isText = false;
 
-    try {
-      outputText.value = new TextDecoder().decode(result.bytes);
-    } catch {
-      outputText.value = "تم استخراج ملف غير نصي.";
+try {
+  text = new TextDecoder().decode(result.bytes);
+
+  // إذا لم يكن الملف Word أو PDF
+  if (!text.startsWith("PK") && !text.startsWith("%PDF")) {
+    outputText.value = text;
+    isText = true;
+  }
+} catch {}
+
+if (!isText) {
+  outputText.value =
+    "تم استخراج ملف غير نصي.\nيمكنك تنزيله من زر (تنزيل الملف).";
     }
 
     statusDecode.textContent = result.crcOk
