@@ -9,8 +9,8 @@ const filesToCache = [
   "./icon-512.png"
 ];
 
-// ⚠️ لاحظ: لم نضع script.js ولا alm64.js هنا
-// لأن تخزينهما يسبب مشاكل عند التحديث
+// ⚠️ لا نضع script.js ولا alm64.js في الكاش
+// لأنها تتغير باستمرار ويجب تحميلها من الشبكة دائمًا
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
