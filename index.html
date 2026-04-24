@@ -1,62 +1,89 @@
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
-  <meta charset="UTF-8" />
-  <title>ALM‑Xx16 Word Encoder</title>
-  <link rel="stylesheet" href="style.css" />
+    <meta charset="UTF-8" />
+    <title>ALM‑64bit Xx16 Encoder</title>
+
+    <!-- CSS -->
+    <link rel="stylesheet" href="style.css" />
+
+    <!-- PDF.js -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.2.67/pdf.min.js"></script>
+
+    <!-- JSZip -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 </head>
+
 <body>
-  <div class="app">
-    <h1>ALM‑Xx16 — تحويل النصوص والكتب إلى صورة</h1>
+    <div class="app">
 
-    <section class="panel">
-      <h2>إدخال النص / الملف</h2>
+        <h1>ALM‑64bit — Xx16 Encoder/Decoder</h1>
 
-      <label class="label">نص يدوي:</label>
-      <textarea id="inputText" placeholder="اكتب النص هنا..."></textarea>
+        <!-- USER KEY -->
+        <section class="panel">
+            <h2>🔐 رمز المستخدم (User Key)</h2>
+            <input id="userKey" type="text" placeholder="أدخل رمز المستخدم هنا..." />
+            <p class="note">هذا المفتاح يستخدم لتشفير وفك تشفير النص داخل الصورة.</p>
+        </section>
 
-      <div class="row">
-        <div>
-          <label class="label">اختيار ملف (TXT / DOCX / PDF):</label>
-          <input type="file" id="fileInput" />
-        </div>
-        <button id="extractFromFileBtn">استخراج النص من الملف</button>
-      </div>
+        <!-- INPUT SECTION -->
+        <section class="panel">
+            <h2>📥 إدخال النص أو الملف</h2>
 
-      <div class="row">
-        <button id="encodeToImageBtn">تحويل إلى صورة (ALM‑Xx16)</button>
-      </div>
-    </section>
+            <label class="label">نص يدوي:</label>
+            <textarea id="inputText" placeholder="اكتب النص هنا..."></textarea>
 
-    <section class="panel">
-      <h2>الصورة الناتجة</h2>
-      <canvas id="canvas" width="1024" height="1024"></canvas>
-      <div class="row">
-        <button id="downloadImageBtn">تحميل الصورة</button>
-      </div>
-    </section>
+            <div class="row">
+                <div>
+                    <label class="label">اختيار ملف (TXT / DOCX / PDF):</label>
+                    <input type="file" id="fileInput" />
+                </div>
+                <button id="extractFromFileBtn">استخراج النص من الملف</button>
+            </div>
 
-    <section class="panel">
-      <h2>الاسترجاع من صورة</h2>
+            <div class="row">
+                <button id="encodeToImageBtn">تحويل النص إلى صورة (ALM‑64bit)</button>
+            </div>
+        </section>
 
-      <div class="row">
-        <label class="label">اختيار صورة:</label>
-        <input type="file" id="imageInput" accept="image/png,image/jpeg" />
-      </div>
+        <!-- OUTPUT IMAGE -->
+        <section class="panel">
+            <h2>🖼️ الصورة الناتجة</h2>
+            <canvas id="canvas" width="1024" height="1024"></canvas>
 
-      <div class="row">
-        <button id="decodeFromImageBtn">استخراج النص / الملف من الصورة</button>
-      </div>
+            <div class="row">
+                <button id="downloadImageBtn">تحميل الصورة</button>
+            </div>
+        </section>
 
-      <label class="label">النص المسترجع (إذا كان صغيرًا):</label>
-      <textarea id="outputText" readonly></textarea>
+        <!-- DECODE SECTION -->
+        <section class="panel">
+            <h2>📤 استرجاع النص من الصورة</h2>
 
-      <div class="row">
-        <button id="downloadRecoveredTxtBtn">حفظ كنص TXT</button>
-      </div>
-    </section>
-  </div>
+            <div class="row">
+                <label class="label">اختيار صورة:</label>
+                <input type="file" id="imageInput" accept="image/png,image/jpeg" />
+            </div>
 
-  <script src="script.js"></script>
+            <div class="row">
+                <button id="decodeFromImageBtn">استخراج النص</button>
+            </div>
+
+            <label class="label">النص المسترجع:</label>
+            <textarea id="outputText" readonly></textarea>
+
+            <div class="row">
+                <button id="downloadRecoveredTxtBtn">حفظ كنص TXT</button>
+            </div>
+        </section>
+
+    </div>
+
+    <!-- ALM 64‑bit core -->
+    <script src="alm64.js"></script>
+
+    <!-- Main logic -->
+    <script src="script.js"></script>
+
 </body>
 </html>
