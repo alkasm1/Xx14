@@ -1,14 +1,16 @@
+const cacheName = "alm64-v10";   // غيّر الرقم عند كل تحديث
 
-const cacheName = "xx111-alm-v2";
 const filesToCache = [
   "./",
   "./index.html",
-  "./script.js",
   "./style.css",
   "./manifest.json",
   "./icon-192.png",
   "./icon-512.png"
 ];
+
+// ⚠️ لاحظ: لم نضع script.js ولا alm64.js هنا
+// لأن تخزينهما يسبب مشاكل عند التحديث
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
@@ -25,9 +27,22 @@ self.addEventListener("activate", (event) => {
       )
     )
   );
+  self.clients.claim();
 });
 
+// Network-first for JS files
 self.addEventListener("fetch", (event) => {
+  const url = event.request.url;
+
+  // ملفات JS يجب أن تأتي من الشبكة دائمًا
+  if (url.endsWith(".js")) {
+    event.respondWith(
+      fetch(event.request).catch(() => caches.match(event.request))
+    );
+    return;
+  }
+
+  // باقي الملفات: cache-first
   event.respondWith(
     caches.match(event.request).then((response) => response || fetch(event.request))
   );
