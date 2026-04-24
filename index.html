@@ -1,78 +1,62 @@
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
-  <meta charset="UTF-8">
-  <title>Xx16‑ALM — Text/Image System</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <link rel="stylesheet" href="style.css">
+  <meta charset="UTF-8" />
+  <title>ALM‑Xx16 Word Encoder</title>
+  <link rel="stylesheet" href="style.css" />
 </head>
-
 <body>
+  <div class="app">
+    <h1>ALM‑Xx16 — تحويل النصوص والكتب إلى صورة</h1>
 
-  <h2 class="title">Xx16‑ALM — Text ↔ Image</h2>
+    <section class="panel">
+      <h2>إدخال النص / الملف</h2>
 
-  <!-- TEXT INPUT -->
-  <section class="box">
-    <h3>النص</h3>
+      <label class="label">نص يدوي:</label>
+      <textarea id="inputText" placeholder="اكتب النص هنا..."></textarea>
 
-    <label>أدخل النص هنا أو قم بتحميل ملف لاستخراج النص:</label>
-    <textarea id="textBox" placeholder="اكتب النص هنا..."></textarea>
+      <div class="row">
+        <div>
+          <label class="label">اختيار ملف (TXT / DOCX / PDF):</label>
+          <input type="file" id="fileInput" />
+        </div>
+        <button id="extractFromFileBtn">استخراج النص من الملف</button>
+      </div>
 
-    <label>تحميل ملف TXT / PDF / DOCX:</label>
-    <input type="file" id="fileInput">
+      <div class="row">
+        <button id="encodeToImageBtn">تحويل إلى صورة (ALM‑Xx16)</button>
+      </div>
+    </section>
 
-    <button id="btnExtract">استخراج النص من الملف</button>
-  </section>
+    <section class="panel">
+      <h2>الصورة الناتجة</h2>
+      <canvas id="canvas" width="1024" height="1024"></canvas>
+      <div class="row">
+        <button id="downloadImageBtn">تحميل الصورة</button>
+      </div>
+    </section>
 
-  <!-- ENCODE -->
-  <section class="box">
-    <h3>تحويل النص إلى صورة</h3>
+    <section class="panel">
+      <h2>الاسترجاع من صورة</h2>
 
-    <label>مفتاح المستخدم (اختياري):</label>
-    <input type="text" id="userKey" placeholder="مثال: USER-KEY-123">
+      <div class="row">
+        <label class="label">اختيار صورة:</label>
+        <input type="file" id="imageInput" accept="image/png,image/jpeg" />
+      </div>
 
-    <button id="btnEncode">تحويل النص إلى صورة</button>
-    <button id="btnSaveImage" class="save">💾 حفظ الصورة</button>
+      <div class="row">
+        <button id="decodeFromImageBtn">استخراج النص / الملف من الصورة</button>
+      </div>
 
-    <p id="statusEncode" class="status">جاهز.</p>
+      <label class="label">النص المسترجع (إذا كان صغيرًا):</label>
+      <textarea id="outputText" readonly></textarea>
 
-    <canvas id="canvas"></canvas>
-  </section>
+      <div class="row">
+        <button id="downloadRecoveredTxtBtn">حفظ كنص TXT</button>
+      </div>
+    </section>
+  </div>
 
-  <!-- DECODE -->
-  <section class="box">
-    <h3>استرجاع من صورة</h3>
-
-    <label>اختيار صورة PNG:</label>
-    <input type="file" id="imageInput" accept="image/png">
-
-    <button id="btnDecode">استرجاع</button>
-
-    <h4>البيانات المستخرجة:</h4>
-    <div id="metaBox" class="metaBox"></div>
-
-    <label>النص المسترجع:</label>
-    <textarea id="outputText" readonly></textarea>
-
-   <button id="btnExportWord">تنزيل كملف Word</button>
-<button id="btnExportPDF">تنزيل كملف PDF</button> 
-    
-
-    <p id="statusDecode" class="status"></p>
-  </section>
-
-  <footer>
-    © 2026 — <strong>Developer: Eng. رأفت عمر</strong>
-  </footer>
-
-  <<script src="https://cdnjs.cloudflare.com/ajax/libs/docx/8.3.2/docx.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script> src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.2.67/pdf.min.js"></script>
-<script>
-  pdfjsLib.GlobalWorkerOptions.workerSrc =
-    "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.2.67/pdf.worker.min.js";
-</script>
-
-<script src="script.js"></script>
+  <script src="script.js"></script>
 </body>
 </html>
