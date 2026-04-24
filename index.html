@@ -4,7 +4,6 @@
     <meta charset="UTF-8" />
     <title>ALM‑64bit Xx16 Encoder</title>
 
-    <!-- CSS -->
     <link rel="stylesheet" href="style.css" />
 
     <!-- PDF.js -->
@@ -19,14 +18,11 @@
 
         <h1>ALM‑64bit — Xx16 Encoder/Decoder</h1>
 
-        <!-- USER KEY -->
         <section class="panel">
             <h2>🔐 رمز المستخدم (User Key)</h2>
             <input id="userKey" type="text" placeholder="أدخل رمز المستخدم هنا..." />
-            <p class="note">هذا المفتاح يستخدم لتشفير وفك تشفير النص داخل الصورة.</p>
         </section>
 
-        <!-- INPUT SECTION -->
         <section class="panel">
             <h2>📥 إدخال النص أو الملف</h2>
 
@@ -38,15 +34,14 @@
                     <label class="label">اختيار ملف (TXT / DOCX / PDF):</label>
                     <input type="file" id="fileInput" />
                 </div>
-                <button id="extractFromFileBtn">استخراج النص من الملف</button>
+                <button id="extractFromFileBtn">استخراج النص</button>
             </div>
 
             <div class="row">
-                <button id="encodeToImageBtn">تحويل النص إلى صورة (ALM‑64bit)</button>
+                <button id="encodeToImageBtn">تحويل النص إلى صورة</button>
             </div>
         </section>
 
-        <!-- OUTPUT IMAGE -->
         <section class="panel">
             <h2>🖼️ الصورة الناتجة</h2>
             <canvas id="canvas" width="1024" height="1024"></canvas>
@@ -56,7 +51,6 @@
             </div>
         </section>
 
-        <!-- DECODE SECTION -->
         <section class="panel">
             <h2>📤 استرجاع النص من الصورة</h2>
 
@@ -79,10 +73,8 @@
 
     </div>
 
-    <!-- ALM 64‑bit core -->
+    <!-- يجب أن يكون ترتيب السكربتات بهذا الشكل بالضبط -->
     <script src="alm64.js"></script>
-
-    <!-- Main logic -->
     <script src="script.js"></script>
 
 </body>
