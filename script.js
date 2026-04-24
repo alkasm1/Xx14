@@ -1,260 +1,180 @@
 /****************************************************
- * ALM Word Encoder v1.0 — الكلمة → BigInt → بايتات
+ * ALM‑WordEncoder v3.0
+ * 64‑bit reversible blocks + UserKey encryption
+ * كل بلوك يحمل حتى 12 حرفًا (12 × 5 = 60 بت)
+ * 4 بت إضافية لتخزين طول البلوك
  ****************************************************/
 
+// 32 رمزًا بالضبط
 const ALM_ALPHABET = "ابتثجحخدذرزسشصضطظعغفقكلمنهويء ،.";
 
-if (ALM_ALPHABET.length !== 32) {
-  console.error("❌ خطأ: يجب أن يحتوي جدول ALM على 32 رمزاً بالضبط.");
-}
-
+/****************************************************
+ * 1) Normalize Arabic
+ ****************************************************/
 function normalizeArabic(str) {
-  const TASHKEEL = /[\u0610-\u061A\u064B-\u065F\u0670\u06D6-\u06ED]/g;
-  str = str.replace(TASHKEEL, "");
-  str = str.replace(/[أإآٱ]/g, "ا");
-  str = str.replace(/ى/g, "ي");
-  str = str.replace(/ة/g, "ه");
-  str = str.replace(/\s+/g, " ").trim();
-  return str;
+    const TASHKEEL = /[\u0610-\u061A\u064B-\u065F\u0670\u06D6-\u06ED]/g;
+    str = str.replace(TASHKEEL, "");
+    str = str.replace(/[أإآٱ]/g, "ا");
+    str = str.replace(/ى/g, "ي");
+    str = str.replace(/ة/g, "ه");
+    str = str.replace(/\s+/g, " ").trim();
+    return str;
 }
 
-function charToSeed(ch) {
-  const idx = ALM_ALPHABET.indexOf(ch);
-  if (idx === -1) return ALM_ALPHABET.indexOf(" ");
-  return idx;
+/****************************************************
+ * 2) حرف → index (0..31)
+ ****************************************************/
+function charToIndex(ch) {
+    const i = ALM_ALPHABET.indexOf(ch);
+    return i === -1 ? ALM_ALPHABET.indexOf(" ") : i;
 }
 
-function rotl32(x, n) {
-  return ((x << n) | (x >>> (32 - n))) >>> 0;
+/****************************************************
+ * 3) index → حرف
+ ****************************************************/
+function indexToChar(i) {
+    return ALM_ALPHABET[i] || " ";
 }
 
-function hashBlock(block) {
-  let seed = 0xA5A5A5A5 >>> 0;
-  for (let i = 0; i < block.length; i++) {
-    const s = charToSeed(block[i]) & 0xff;
-    seed = (seed ^ s) >>> 0;
-    seed = rotl32(seed, 5);
-    seed = (seed * 2654435761) >>> 0;
-  }
-  return seed >>> 0;
+/****************************************************
+ * 4) ترميز بلوك (حتى 12 حرفًا) إلى 64‑bit
+ ****************************************************/
+function encodeBlockTo64(block) {
+    const len = block.length; // 1..12
+    let value = 0n;
+
+    for (let i = 0; i < len; i++) {
+        const idx = BigInt(charToIndex(block[i])); // 0..31
+        value = (value << 5n) | idx;               // 5 بت لكل حرف
+    }
+
+    // نضيف طول البلوك في أعلى 4 بت
+    value |= (BigInt(len) & 0xfn) << 60n;
+
+    return value & 0xFFFFFFFFFFFFFFFFn; // 64‑bit
 }
 
-function splitToBlocks(word, blockSize = 12) {
-  const blocks = [];
-  for (let i = 0; i < word.length; i += blockSize) {
-    blocks.push(word.slice(i, i + blockSize));
-  }
-  return blocks;
+/****************************************************
+ * 5) فك بلوك 64‑bit إلى حروف
+ ****************************************************/
+function decodeBlockFrom64(value) {
+    const len = Number((value >> 60n) & 0xfn); // 4 بت للطول
+    let x = value & 0x0FFFFFFFFFFFFFFFn;       // 60 بت للحروف
+
+    const chars = new Array(len);
+    for (let i = len - 1; i >= 0; i--) {
+        const idx = Number(x & 0x1Fn); // آخر 5 بت
+        chars[i] = indexToChar(idx);
+        x >>= 5n;
+    }
+    return chars.join("");
 }
 
-function encodeWordToBigInt(wordRaw) {
-  const word = normalizeArabic(wordRaw);
-  if (!word) return 0n;
-  const blocks = splitToBlocks(word, 12);
-  let result = 0n;
-  for (const block of blocks) {
-    const h = hashBlock(block);
-    result = (result << 32n) | BigInt(h);
-  }
-  return result;
+/****************************************************
+ * 6) تقسيم الكلمة إلى بلوكات 12 حرف
+ ****************************************************/
+function splitToBlocks12(word) {
+    const blocks = [];
+    for (let i = 0; i < word.length; i += 12) {
+        blocks.push(word.slice(i, i + 12));
+    }
+    return blocks;
 }
 
+/****************************************************
+ * 7) UserKey → 64‑bit
+ ****************************************************/
+function userKeyTo64Bit(keyString) {
+    let h = 0n;
+    for (let i = 0; i < keyString.length; i++) {
+        h = (h * 131n) ^ BigInt(keyString.charCodeAt(i));
+        h &= 0xFFFFFFFFFFFFFFFFn;
+    }
+    return h;
+}
+
+/****************************************************
+ * 8) تشفير بلوك 64‑bit باستخدام XOR
+ ****************************************************/
+function encryptBlock64(block64, userKey64) {
+    return (block64 ^ userKey64) & 0xFFFFFFFFFFFFFFFFn;
+}
+
+/****************************************************
+ * 9) فك تشفير بلوك 64‑bit
+ ****************************************************/
+function decryptBlock64(enc64, userKey64) {
+    return (enc64 ^ userKey64) & 0xFFFFFFFFFFFFFFFFn;
+}
+
+/****************************************************
+ * 10) الكلمة → BigInt (مع تشفير)
+ ****************************************************/
+function encodeWordToBigInt(wordRaw, userKey) {
+    const word = normalizeArabic(wordRaw);
+    if (!word) return 0n;
+
+    const userKey64 = userKeyTo64Bit(userKey);
+    const blocks = splitToBlocks12(word);
+
+    let result = 0n;
+
+    for (const block of blocks) {
+        const b64 = encodeBlockTo64(block);
+        const enc = encryptBlock64(b64, userKey64);
+        result = (result << 64n) | enc;
+    }
+
+    return result;
+}
+
+/****************************************************
+ * 11) BigInt → كلمة (مع فك التشفير)
+ ****************************************************/
+function decodeBigIntToWord(bigIntValue, userKey) {
+    const userKey64 = userKeyTo64Bit(userKey);
+    let x = bigIntValue;
+
+    const blocks = [];
+
+    while (x > 0n) {
+        const enc = x & 0xFFFFFFFFFFFFFFFFn; // آخر 64‑bit
+        x >>= 64n;
+
+        const dec = decryptBlock64(enc, userKey64);
+        const block = decodeBlockFrom64(dec);
+        blocks.push(block);
+    }
+
+    blocks.reverse();
+    return blocks.join("");
+}
+
+/****************************************************
+ * 12) BigInt → بايتات
+ ****************************************************/
 function bigIntToBytes(bi) {
-  if (bi === 0n) return new Uint8Array([0]);
-  const bytes = [];
-  let x = bi;
-  while (x > 0n) {
-    bytes.push(Number(x & 0xffn));
-    x >>= 8n;
-  }
-  bytes.reverse();
-  return new Uint8Array(bytes);
-}
+    if (bi === 0n) return new Uint8Array([0]);
 
-function encodeWordALM(wordRaw) {
-  const bi = encodeWordToBigInt(wordRaw);
-  const bytes = bigIntToBytes(bi);
-  return { bigInt: bi, bytes };
-}
+    const bytes = [];
+    let x = bi;
 
-/****************************************************
- * تحويل نص كامل إلى بايتات ALM (كلمات متسلسلة)
- ****************************************************/
-
-function encodeTextToALMBytes(textRaw) {
-  const text = textRaw.trim();
-  if (!text) return new Uint8Array([]);
-
-  const words = text.split(" ");
-  const out = [];
-
-  for (const w of words) {
-    const { bytes } = encodeWordALM(w);
-    // نخزن طول البايتات أولاً (1 بايت يكفي حتى 255)
-    if (bytes.length > 255) {
-      console.warn("كلمة نتج عنها أكثر من 255 بايت، سيتم قطعها.");
+    while (x > 0n) {
+        bytes.push(Number(x & 0xffn));
+        x >>= 8n;
     }
-    out.push(bytes.length & 0xff);
-    for (let i = 0; i < bytes.length; i++) {
-      out.push(bytes[i]);
-    }
-  }
 
-  return new Uint8Array(out);
+    bytes.reverse();
+    return new Uint8Array(bytes);
 }
 
 /****************************************************
- * Xx16 بسيط: تخزين البايتات في القناة الحمراء لصورة 1024×1024
+ * 13) بايتات → BigInt
  ****************************************************/
-
-const canvas = document.getElementById("canvas");
-const ctx = canvas.getContext("2d");
-
-function bytesToImage(data) {
-  const size = 1024;
-  const imgData = ctx.createImageData(size, size);
-  const totalPixels = size * size;
-  const maxBytes = totalPixels; // نستخدم القناة R فقط
-
-  for (let i = 0; i < totalPixels; i++) {
-    const byte = i < data.length ? data[i] : 0;
-    const idx = i * 4;
-    imgData.data[idx + 0] = byte; // R
-    imgData.data[idx + 1] = 0;    // G
-    imgData.data[idx + 2] = 0;    // B
-    imgData.data[idx + 3] = 255;  // A
-  }
-
-  ctx.putImageData(imgData, 0, 0);
-}
-
-function imageToBytes() {
-  const size = 1024;
-  const imgData = ctx.getImageData(0, 0, size, size);
-  const totalPixels = size * size;
-  const out = new Uint8Array(totalPixels);
-
-  for (let i = 0; i < totalPixels; i++) {
-    const idx = i * 4;
-    out[i] = imgData.data[idx + 0]; // R
-  }
-
-  return out;
-}
-
-/****************************************************
- * استرجاع نص تقريبي من بايتات ALM (للعرض فقط)
- * هنا لن نعيد الكلمة الأصلية بدقة (لأن ALM أحادي الاتجاه)،
- * لكن سنعيد تمثيلاً نصيًا بسيطًا (طول الكلمة + رقم).
- ****************************************************/
-
-function decodeALMBytesToDebugText(bytes) {
-  let i = 0;
-  const parts = [];
-  let wordIndex = 1;
-
-  while (i < bytes.length) {
-    const len = bytes[i++];
-    if (len === 0 || i + len > bytes.length) break;
-
+function bytesToBigInt(bytes) {
     let bi = 0n;
-    for (let j = 0; j < len; j++) {
-      bi = (bi << 8n) | BigInt(bytes[i + j]);
+    for (let i = 0; i < bytes.length; i++) {
+        bi = (bi << 8n) | BigInt(bytes[i]);
     }
-    i += len;
-
-    parts.push(`كلمة ${wordIndex}: ${bi.toString()}`);
-    wordIndex++;
-  }
-
-  return parts.join("\n");
+    return bi;
 }
-
-/****************************************************
- * ربط الواجهة
- ****************************************************/
-
-const inputText = document.getElementById("inputText");
-const fileInput = document.getElementById("fileInput");
-const extractFromFileBtn = document.getElementById("extractFromFileBtn");
-const encodeToImageBtn = document.getElementById("encodeToImageBtn");
-const downloadImageBtn = document.getElementById("downloadImageBtn");
-
-const imageInput = document.getElementById("imageInput");
-const decodeFromImageBtn = document.getElementById("decodeFromImageBtn");
-const outputText = document.getElementById("outputText");
-const downloadRecoveredTxtBtn = document.getElementById("downloadRecoveredTxtBtn");
-
-// حالياً: استخراج نص من ملف TXT فقط (مبسّط)
-extractFromFileBtn.addEventListener("click", () => {
-  const file = fileInput.files && fileInput.files[0];
-  if (!file) {
-    alert("اختر ملفاً أولاً.");
-    return;
-  }
-
-  if (!file.name.toLowerCase().endsWith(".txt")) {
-    alert("حالياً يدعم TXT فقط في هذا النموذج المبسط.");
-    return;
-  }
-
-  const reader = new FileReader();
-  reader.onload = () => {
-    inputText.value = reader.result;
-  };
-  reader.readAsText(file, "utf-8");
-});
-
-encodeToImageBtn.addEventListener("click", () => {
-  const text = inputText.value;
-  if (!text.trim()) {
-    alert("أدخل نصاً أو استخرج نصاً من ملف أولاً.");
-    return;
-  }
-
-  const almBytes = encodeTextToALMBytes(text);
-  if (almBytes.length > 1024 * 1024) {
-    alert("النص كبير جداً لصورة واحدة 1024×1024 في هذا النموذج.");
-    return;
-  }
-
-  bytesToImage(almBytes);
-  alert("تم تحويل النص إلى صورة بنظام ALM‑Xx16.");
-});
-
-downloadImageBtn.addEventListener("click", () => {
-  const link = document.createElement("a");
-  link.download = "alm_xx16.png";
-  link.href = canvas.toDataURL("image/png");
-  link.click();
-});
-
-imageInput.addEventListener("change", () => {
-  const file = imageInput.files && imageInput.files[0];
-  if (!file) return;
-
-  const img = new Image();
-  const reader = new FileReader();
-  reader.onload = () => {
-    img.onload = () => {
-      ctx.drawImage(img, 0, 0, 1024, 1024);
-    };
-    img.src = reader.result;
-  };
-  reader.readAsDataURL(file);
-});
-
-decodeFromImageBtn.addEventListener("click", () => {
-  const bytes = imageToBytes();
-  const debugText = decodeALMBytesToDebugText(bytes);
-  outputText.value = debugText || "لم يتم العثور على بيانات ALM صالحة.";
-});
-
-downloadRecoveredTxtBtn.addEventListener("click", () => {
-  const text = outputText.value || "";
-  const blob = new Blob([text], { type: "text/plain;charset=utf-8" });
-  const link = document.createElement("a");
-  link.download = "recovered_alm.txt";
-  link.href = URL.createObjectURL(blob);
-  link.click();
-});
