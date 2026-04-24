@@ -1,353 +1,260 @@
 /****************************************************
- * Xx16‑ALM — Text/Image System (DOCX + PDF + Arabic)
+ * ALM Word Encoder v1.0 — الكلمة → BigInt → بايتات
  ****************************************************/
 
-// ===================== جدول الترميز =====================
-// ترتيب A: الحروف العربية الأساسية ثم (ة، ى) ثم الأرقام ثم الترقيم ثم المسافة ثم الهمزات
-const ALPHABET = "ابتثجحخدذرزسشصضطظعغفقكلمنهويةى0123456789.،!؟- ءأإآؤئ";
+const ALM_ALPHABET = "ابتثجحخدذرزسشصضطظعغفقكلمنهويء ،.";
 
-function encodeChar(ch) {
-  const idx = ALPHABET.indexOf(ch);
-  return idx === -1 ? 255 : idx;
+if (ALM_ALPHABET.length !== 32) {
+  console.error("❌ خطأ: يجب أن يحتوي جدول ALM على 32 رمزاً بالضبط.");
 }
 
-function decodeChar(code) {
-  if (code >= 0 && code < ALPHABET.length) return ALPHABET[code];
-  return "";
+function normalizeArabic(str) {
+  const TASHKEEL = /[\u0610-\u061A\u064B-\u065F\u0670\u06D6-\u06ED]/g;
+  str = str.replace(TASHKEEL, "");
+  str = str.replace(/[أإآٱ]/g, "ا");
+  str = str.replace(/ى/g, "ي");
+  str = str.replace(/ة/g, "ه");
+  str = str.replace(/\s+/g, " ").trim();
+  return str;
 }
 
-function encodeText(str) {
+function charToSeed(ch) {
+  const idx = ALM_ALPHABET.indexOf(ch);
+  if (idx === -1) return ALM_ALPHABET.indexOf(" ");
+  return idx;
+}
+
+function rotl32(x, n) {
+  return ((x << n) | (x >>> (32 - n))) >>> 0;
+}
+
+function hashBlock(block) {
+  let seed = 0xA5A5A5A5 >>> 0;
+  for (let i = 0; i < block.length; i++) {
+    const s = charToSeed(block[i]) & 0xff;
+    seed = (seed ^ s) >>> 0;
+    seed = rotl32(seed, 5);
+    seed = (seed * 2654435761) >>> 0;
+  }
+  return seed >>> 0;
+}
+
+function splitToBlocks(word, blockSize = 12) {
+  const blocks = [];
+  for (let i = 0; i < word.length; i += blockSize) {
+    blocks.push(word.slice(i, i + blockSize));
+  }
+  return blocks;
+}
+
+function encodeWordToBigInt(wordRaw) {
+  const word = normalizeArabic(wordRaw);
+  if (!word) return 0n;
+  const blocks = splitToBlocks(word, 12);
+  let result = 0n;
+  for (const block of blocks) {
+    const h = hashBlock(block);
+    result = (result << 32n) | BigInt(h);
+  }
+  return result;
+}
+
+function bigIntToBytes(bi) {
+  if (bi === 0n) return new Uint8Array([0]);
+  const bytes = [];
+  let x = bi;
+  while (x > 0n) {
+    bytes.push(Number(x & 0xffn));
+    x >>= 8n;
+  }
+  bytes.reverse();
+  return new Uint8Array(bytes);
+}
+
+function encodeWordALM(wordRaw) {
+  const bi = encodeWordToBigInt(wordRaw);
+  const bytes = bigIntToBytes(bi);
+  return { bigInt: bi, bytes };
+}
+
+/****************************************************
+ * تحويل نص كامل إلى بايتات ALM (كلمات متسلسلة)
+ ****************************************************/
+
+function encodeTextToALMBytes(textRaw) {
+  const text = textRaw.trim();
+  if (!text) return new Uint8Array([]);
+
+  const words = text.split(" ");
   const out = [];
-  for (let ch of str) out.push(encodeChar(ch));
+
+  for (const w of words) {
+    const { bytes } = encodeWordALM(w);
+    // نخزن طول البايتات أولاً (1 بايت يكفي حتى 255)
+    if (bytes.length > 255) {
+      console.warn("كلمة نتج عنها أكثر من 255 بايت، سيتم قطعها.");
+    }
+    out.push(bytes.length & 0xff);
+    for (let i = 0; i < bytes.length; i++) {
+      out.push(bytes[i]);
+    }
+  }
+
   return new Uint8Array(out);
 }
 
-function decodeText(bytes) {
-  let out = "";
-  for (let b of bytes) out += decodeChar(b);
-  return out;
-}
+/****************************************************
+ * Xx16 بسيط: تخزين البايتات في القناة الحمراء لصورة 1024×1024
+ ****************************************************/
 
-// ===================== CRC32 =====================
-function crc32(bytes) {
-  let crc = 0 ^ (-1);
-  for (let i = 0; i < bytes.length; i++) {
-    let c = (crc ^ bytes[i]) & 0xff;
-    for (let j = 0; j < 8; j++)
-      c = (c & 1) ? (c >>> 1) ^ 0xedb88320 : c >>> 1;
-    crc = (crc >>> 8) ^ c;
-  }
-  return (crc ^ (-1)) >>> 0;
-}
+const canvas = document.getElementById("canvas");
+const ctx = canvas.getContext("2d");
 
-// ===================== ALM HEADER =====================
-function buildALM(rawBytes, userKey, filetype) {
-  const enc = new TextEncoder();
+function bytesToImage(data) {
+  const size = 1024;
+  const imgData = ctx.createImageData(size, size);
+  const totalPixels = size * size;
+  const maxBytes = totalPixels; // نستخدم القناة R فقط
 
-  const magic = enc.encode("ALM");
-  const version = 1;
-
-  const ftBytes = enc.encode(filetype);
-  const ftLen = ftBytes.length;
-
-  const filesize = rawBytes.length >>> 0;
-  const timestamp = Math.floor(Date.now() / 1000) >>> 0;
-
-  const keyBytes = enc.encode(userKey || "");
-  const keyLen = keyBytes.length;
-
-  const crc = crc32(rawBytes);
-
-  const headerLen =
-    3 + 1 + 1 + ftLen + 4 + 4 + 1 + keyLen + 4;
-
-  const out = new Uint8Array(headerLen + rawBytes.length);
-  let o = 0;
-
-  out.set(magic, o); o += 3;
-  out[o++] = version;
-
-  out[o++] = ftLen;
-  out.set(ftBytes, o); o += ftLen;
-
-  out[o++] = (filesize >>> 24) & 0xff;
-  out[o++] = (filesize >>> 16) & 0xff;
-  out[o++] = (filesize >>> 8) & 0xff;
-  out[o++] = filesize & 0xff;
-
-  out[o++] = (timestamp >>> 24) & 0xff;
-  out[o++] = (timestamp >>> 16) & 0xff;
-  out[o++] = (timestamp >>> 8) & 0xff;
-  out[o++] = timestamp & 0xff;
-
-  out[o++] = keyLen;
-  out.set(keyBytes, o); o += keyLen;
-
-  out[o++] = (crc >>> 24) & 0xff;
-  out[o++] = (crc >>> 16) & 0xff;
-  out[o++] = (crc >>> 8) & 0xff;
-  out[o++] = crc & 0xff;
-
-  out.set(rawBytes, o);
-
-  return out;
-}
-
-function parseALM(stream) {
-  const dec = new TextDecoder();
-  let o = 0;
-
-  if (dec.decode(stream.slice(0, 3)) !== "ALM")
-    return { ok: false, error: "ترويسة غير صحيحة" };
-  o += 3;
-
-  const version = stream[o++];
-
-  const ftLen = stream[o++];
-  const filetype = dec.decode(stream.slice(o, o + ftLen));
-  o += ftLen;
-
-  const filesize =
-    (stream[o++] << 24) |
-    (stream[o++] << 16) |
-    (stream[o++] << 8) |
-    stream[o++];
-
-  const timestamp =
-    (stream[o++] << 24) |
-    (stream[o++] << 16) |
-    (stream[o++] << 8) |
-    stream[o++];
-
-  const keyLen = stream[o++];
-  const key = dec.decode(stream.slice(o, o + keyLen));
-  o += keyLen;
-
-  const crcStored =
-    ((stream[o++] << 24) |
-     (stream[o++] << 16) |
-     (stream[o++] << 8) |
-     stream[o++]) >>> 0;
-
-  const bytesAll = stream.slice(o);
-  const bytes = bytesAll.slice(0, filesize);
-
-  const crcCalc = crc32(bytes);
-
-  return {
-    ok: true,
-    bytes,
-    key,
-    filetype,
-    filesize,
-    timestamp,
-    crcOk: crcCalc === crcStored
-  };
-}
-
-// ===================== Xx16 ENCODE (1024×1024) =====================
-const SIZE = 1024;
-
-function encodeToCanvas(bytes) {
-  const canvas = document.getElementById("canvas");
-  const ctx = canvas.getContext("2d");
-
-  canvas.width = SIZE;
-  canvas.height = SIZE;
-
-  const img = ctx.createImageData(SIZE, SIZE);
-  const d = img.data;
-
-  for (let i = 0; i < SIZE * SIZE; i++) {
-    const b = bytes[i] || 0;
-    const p = i * 4;
-    d[p] = b;
-    d[p + 1] = 0;
-    d[p + 2] = 0;
-    d[p + 3] = 255;
+  for (let i = 0; i < totalPixels; i++) {
+    const byte = i < data.length ? data[i] : 0;
+    const idx = i * 4;
+    imgData.data[idx + 0] = byte; // R
+    imgData.data[idx + 1] = 0;    // G
+    imgData.data[idx + 2] = 0;    // B
+    imgData.data[idx + 3] = 255;  // A
   }
 
-  ctx.putImageData(img, 0, 0);
+  ctx.putImageData(imgData, 0, 0);
 }
 
-function decodeFromCanvas(img) {
-  const canvas = document.getElementById("canvas");
-  const ctx = canvas.getContext("2d");
+function imageToBytes() {
+  const size = 1024;
+  const imgData = ctx.getImageData(0, 0, size, size);
+  const totalPixels = size * size;
+  const out = new Uint8Array(totalPixels);
 
-  canvas.width = img.width;
-  canvas.height = img.height;
-  ctx.drawImage(img, 0, 0);
-
-  const data = ctx.getImageData(0, 0, img.width, img.height).data;
-  const out = new Uint8Array(img.width * img.height);
-
-  for (let i = 0; i < out.length; i++)
-    out[i] = data[i * 4];
+  for (let i = 0; i < totalPixels; i++) {
+    const idx = i * 4;
+    out[i] = imgData.data[idx + 0]; // R
+  }
 
   return out;
 }
 
-// ===================== UI عناصر =====================
-const textBox = document.getElementById("textBox");
-const fileInput = document.getElementById("fileInput");
-const imageInput = document.getElementById("imageInput");
-const userKeyEl = document.getElementById("userKey");
-const outputText = document.getElementById("outputText");
-const metaBox = document.getElementById("metaBox");
+/****************************************************
+ * استرجاع نص تقريبي من بايتات ALM (للعرض فقط)
+ * هنا لن نعيد الكلمة الأصلية بدقة (لأن ALM أحادي الاتجاه)،
+ * لكن سنعيد تمثيلاً نصيًا بسيطًا (طول الكلمة + رقم).
+ ****************************************************/
 
-let decodedBytes = null;
-let decodedFiletype = null;
+function decodeALMBytesToDebugText(bytes) {
+  let i = 0;
+  const parts = [];
+  let wordIndex = 1;
 
-// ===================== استخراج النص من ملف =====================
-document.getElementById("btnExtract").onclick = async () => {
-  const file = fileInput.files[0];
-  if (!file) return alert("اختر ملفاً أولاً");
+  while (i < bytes.length) {
+    const len = bytes[i++];
+    if (len === 0 || i + len > bytes.length) break;
 
-  const ext = file.name.split(".").pop().toLowerCase();
-
-  if (ext === "txt") {
-    const reader = new FileReader();
-    reader.onload = e => {
-      textBox.value = e.target.result;
-    };
-    reader.readAsText(file, "utf-8");
-  } else if (ext === "docx") {
-    // DOCX = ZIP → نستخدم JSZip
-    const arrayBuffer = await file.arrayBuffer();
-    const zip = await JSZip.loadAsync(arrayBuffer);
-    const docXml = await zip.file("word/document.xml").async("string");
-
-    // استخراج النص من XML
-    let text = docXml
-      .replace(/<w:p[^>]*>/g, "\n")   // فقرة جديدة
-      .replace(/<[^>]+>/g, "")        // إزالة كل الوسوم
-      .replace(/&amp;/g, "&")
-      .replace(/&lt;/g, "<")
-      .replace(/&gt;/g, ">")
-      .replace(/&quot;/g, "\"")
-      .replace(/&apos;/g, "'");
-
-    textBox.value = text.trim();
-  } else if (ext === "pdf") {
-    // PDF → نستخدم pdf.js
-    const arrayBuffer = await file.arrayBuffer();
-    const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-
-    let fullText = "";
-    for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
-      const page = await pdf.getPage(pageNum);
-      const content = await page.getTextContent();
-      const strings = content.items.map(it => it.str);
-      fullText += strings.join(" ") + "\n";
+    let bi = 0n;
+    for (let j = 0; j < len; j++) {
+      bi = (bi << 8n) | BigInt(bytes[i + j]);
     }
+    i += len;
 
-    textBox.value = fullText.trim();
-  } else {
-    alert("لا يمكن استخراج نص من هذا النوع. يدعم TXT / DOCX / PDF فقط.");
+    parts.push(`كلمة ${wordIndex}: ${bi.toString()}`);
+    wordIndex++;
   }
-};
 
-// ===================== ENCODE النص → صورة =====================
-document.getElementById("btnEncode").onclick = () => {
-  const text = textBox.value.trim();
-  if (!text) return alert("أدخل نصاً أولاً");
+  return parts.join("\n");
+}
 
-  const encoded = encodeText(text);
-  const alm = buildALM(encoded, userKeyEl.value, "txt");
+/****************************************************
+ * ربط الواجهة
+ ****************************************************/
 
-  if (alm.length > SIZE * SIZE) {
-    alert("النص طويل جداً ولا يمكن وضعه في صورة واحدة 1024×1024.");
+const inputText = document.getElementById("inputText");
+const fileInput = document.getElementById("fileInput");
+const extractFromFileBtn = document.getElementById("extractFromFileBtn");
+const encodeToImageBtn = document.getElementById("encodeToImageBtn");
+const downloadImageBtn = document.getElementById("downloadImageBtn");
+
+const imageInput = document.getElementById("imageInput");
+const decodeFromImageBtn = document.getElementById("decodeFromImageBtn");
+const outputText = document.getElementById("outputText");
+const downloadRecoveredTxtBtn = document.getElementById("downloadRecoveredTxtBtn");
+
+// حالياً: استخراج نص من ملف TXT فقط (مبسّط)
+extractFromFileBtn.addEventListener("click", () => {
+  const file = fileInput.files && fileInput.files[0];
+  if (!file) {
+    alert("اختر ملفاً أولاً.");
     return;
   }
 
-  encodeToCanvas(alm);
-  document.getElementById("statusEncode").textContent = "تم تحويل النص إلى صورة.";
-};
+  if (!file.name.toLowerCase().endsWith(".txt")) {
+    alert("حالياً يدعم TXT فقط في هذا النموذج المبسط.");
+    return;
+  }
 
-// ===================== حفظ الصورة =====================
-document.getElementById("btnSaveImage").onclick = () => {
-  const a = document.createElement("a");
-  a.href = canvas.toDataURL("image/png");
-  a.download = "alm_text.png";
-  a.click();
-};
+  const reader = new FileReader();
+  reader.onload = () => {
+    inputText.value = reader.result;
+  };
+  reader.readAsText(file, "utf-8");
+});
 
-// ===================== DECODE من صورة =====================
-document.getElementById("btnDecode").onclick = () => {
-  const file = imageInput.files[0];
-  if (!file) return alert("اختر صورة أولاً");
+encodeToImageBtn.addEventListener("click", () => {
+  const text = inputText.value;
+  if (!text.trim()) {
+    alert("أدخل نصاً أو استخرج نصاً من ملف أولاً.");
+    return;
+  }
+
+  const almBytes = encodeTextToALMBytes(text);
+  if (almBytes.length > 1024 * 1024) {
+    alert("النص كبير جداً لصورة واحدة 1024×1024 في هذا النموذج.");
+    return;
+  }
+
+  bytesToImage(almBytes);
+  alert("تم تحويل النص إلى صورة بنظام ALM‑Xx16.");
+});
+
+downloadImageBtn.addEventListener("click", () => {
+  const link = document.createElement("a");
+  link.download = "alm_xx16.png";
+  link.href = canvas.toDataURL("image/png");
+  link.click();
+});
+
+imageInput.addEventListener("change", () => {
+  const file = imageInput.files && imageInput.files[0];
+  if (!file) return;
 
   const img = new Image();
-  img.onload = () => {
-    const stream = decodeFromCanvas(img);
-    const result = parseALM(stream);
-
-    if (!result.ok) {
-      document.getElementById("statusDecode").textContent = result.error;
-      return;
-    }
-
-    decodedBytes = result.bytes;
-    decodedFiletype = result.filetype;
-
-    metaBox.textContent =
-      "نوع الملف: " + result.filetype +
-      "\nالحجم: " + result.filesize + " بايت" +
-      "\nCRC: " + (result.crcOk ? "صحيح" : "غير مطابق") +
-      "\nالمفتاح: " + (result.key || "بدون مفتاح") +
-      "\nالوقت: " + new Date(result.timestamp * 1000).toLocaleString("ar-EG");
-
-    if (result.filetype === "txt") {
-      outputText.value = decodeText(result.bytes);
-    } else {
-      outputText.value = "تم استخراج ملف غير نصي.\nيمكنك تنزيله من زر (تنزيل الملف الأصلي).";
-    }
-    document.getElementById("btnExportWord").onclick = async () => {
-  const text = outputText.value.trim();
-  if (!text) return alert("لا يوجد نص لتحويله إلى Word");
-
-  const { Document, Packer, Paragraph } = docx;
-
-  const doc = new Document({
-    sections: [{
-      properties: {},
-      children: [new Paragraph(text)],
-    }],
-  });
-
-  const blob = await Packer.toBlob(doc);
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(blob);
-  a.download = "restored.docx";
-  a.click();
-};
-    document.getElementById("btnExportPDF").onclick = () => {
-  const text = outputText.value.trim();
-  if (!text) return alert("لا يوجد نص لتحويله إلى PDF");
-
-  const { jsPDF } = window.jspdf;
-  const pdf = new jsPDF();
-
-  const lines = pdf.splitTextToSize(text, 180);
-  pdf.text(lines, 15, 15);
-
-  pdf.save("restored.pdf");
-};
-    
-
-    document.getElementById("statusDecode").textContent = "تم الاسترجاع.";
+  const reader = new FileReader();
+  reader.onload = () => {
+    img.onload = () => {
+      ctx.drawImage(img, 0, 0, 1024, 1024);
+    };
+    img.src = reader.result;
   };
+  reader.readAsDataURL(file);
+});
 
-  img.src = URL.createObjectURL(file);
-};
+decodeFromImageBtn.addEventListener("click", () => {
+  const bytes = imageToBytes();
+  const debugText = decodeALMBytesToDebugText(bytes);
+  outputText.value = debugText || "لم يتم العثور على بيانات ALM صالحة.";
+});
 
-// ===================== تنزيل الملف الأصلي =====================
-document.getElementById("btnExport").onclick = () => {
-  if (!decodedBytes) return alert("لا يوجد ملف مسترجع");
-
-  const blob = new Blob([decodedBytes], { type: "application/octet-stream" });
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(blob);
-  a.download = "output." + (decodedFiletype || "bin");
-  a.click();
-};
+downloadRecoveredTxtBtn.addEventListener("click", () => {
+  const text = outputText.value || "";
+  const blob = new Blob([text], { type: "text/plain;charset=utf-8" });
+  const link = document.createElement("a");
+  link.download = "recovered_alm.txt";
+  link.href = URL.createObjectURL(blob);
+  link.click();
+});
