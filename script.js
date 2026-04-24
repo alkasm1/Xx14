@@ -1,180 +1,248 @@
 /****************************************************
- * ALM‑WordEncoder v3.0
- * 64‑bit reversible blocks + UserKey encryption
- * كل بلوك يحمل حتى 12 حرفًا (12 × 5 = 60 بت)
- * 4 بت إضافية لتخزين طول البلوك
+ * script.js — Xx16 + ALM‑64bit + UserKey + DOCX + PDF
  ****************************************************/
-
-// 32 رمزًا بالضبط
-const ALM_ALPHABET = "ابتثجحخدذرزسشصضطظعغفقكلمنهويء ،.";
 
 /****************************************************
- * 1) Normalize Arabic
+ * تحميل مكتبات PDF.js و JSZip
  ****************************************************/
-function normalizeArabic(str) {
-    const TASHKEEL = /[\u0610-\u061A\u064B-\u065F\u0670\u06D6-\u06ED]/g;
-    str = str.replace(TASHKEEL, "");
-    str = str.replace(/[أإآٱ]/g, "ا");
-    str = str.replace(/ى/g, "ي");
-    str = str.replace(/ة/g, "ه");
-    str = str.replace(/\s+/g, " ").trim();
-    return str;
+const pdfjsLib = window['pdfjs-dist/build/pdf'];
+pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.2.67/pdf.worker.min.js';
+
+async function loadJSZip() {
+    if (!window.JSZip) {
+        await import("https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js");
+    }
 }
+loadJSZip();
 
 /****************************************************
- * 2) حرف → index (0..31)
+ * عناصر الواجهة
  ****************************************************/
-function charToIndex(ch) {
-    const i = ALM_ALPHABET.indexOf(ch);
-    return i === -1 ? ALM_ALPHABET.indexOf(" ") : i;
-}
+const inputText = document.getElementById("inputText");
+const fileInput = document.getElementById("fileInput");
+const extractFromFileBtn = document.getElementById("extractFromFileBtn");
+const encodeToImageBtn = document.getElementById("encodeToImageBtn");
+const downloadImageBtn = document.getElementById("downloadImageBtn");
+
+const imageInput = document.getElementById("imageInput");
+const decodeFromImageBtn = document.getElementById("decodeFromImageBtn");
+const outputText = document.getElementById("outputText");
+const downloadRecoveredTxtBtn = document.getElementById("downloadRecoveredTxtBtn");
+
+const userKeyInput = document.getElementById("userKey");
 
 /****************************************************
- * 3) index → حرف
+ * 1) استخراج النص من TXT / DOCX / PDF
  ****************************************************/
-function indexToChar(i) {
-    return ALM_ALPHABET[i] || " ";
-}
-
-/****************************************************
- * 4) ترميز بلوك (حتى 12 حرفًا) إلى 64‑bit
- ****************************************************/
-function encodeBlockTo64(block) {
-    const len = block.length; // 1..12
-    let value = 0n;
-
-    for (let i = 0; i < len; i++) {
-        const idx = BigInt(charToIndex(block[i])); // 0..31
-        value = (value << 5n) | idx;               // 5 بت لكل حرف
+extractFromFileBtn.addEventListener("click", async () => {
+    const file = fileInput.files && fileInput.files[0];
+    if (!file) {
+        alert("اختر ملفاً أولاً.");
+        return;
     }
 
-    // نضيف طول البلوك في أعلى 4 بت
-    value |= (BigInt(len) & 0xfn) << 60n;
+    const name = file.name.toLowerCase();
 
-    return value & 0xFFFFFFFFFFFFFFFFn; // 64‑bit
-}
-
-/****************************************************
- * 5) فك بلوك 64‑bit إلى حروف
- ****************************************************/
-function decodeBlockFrom64(value) {
-    const len = Number((value >> 60n) & 0xfn); // 4 بت للطول
-    let x = value & 0x0FFFFFFFFFFFFFFFn;       // 60 بت للحروف
-
-    const chars = new Array(len);
-    for (let i = len - 1; i >= 0; i--) {
-        const idx = Number(x & 0x1Fn); // آخر 5 بت
-        chars[i] = indexToChar(idx);
-        x >>= 5n;
-    }
-    return chars.join("");
-}
-
-/****************************************************
- * 6) تقسيم الكلمة إلى بلوكات 12 حرف
- ****************************************************/
-function splitToBlocks12(word) {
-    const blocks = [];
-    for (let i = 0; i < word.length; i += 12) {
-        blocks.push(word.slice(i, i + 12));
-    }
-    return blocks;
-}
-
-/****************************************************
- * 7) UserKey → 64‑bit
- ****************************************************/
-function userKeyTo64Bit(keyString) {
-    let h = 0n;
-    for (let i = 0; i < keyString.length; i++) {
-        h = (h * 131n) ^ BigInt(keyString.charCodeAt(i));
-        h &= 0xFFFFFFFFFFFFFFFFn;
-    }
-    return h;
-}
-
-/****************************************************
- * 8) تشفير بلوك 64‑bit باستخدام XOR
- ****************************************************/
-function encryptBlock64(block64, userKey64) {
-    return (block64 ^ userKey64) & 0xFFFFFFFFFFFFFFFFn;
-}
-
-/****************************************************
- * 9) فك تشفير بلوك 64‑bit
- ****************************************************/
-function decryptBlock64(enc64, userKey64) {
-    return (enc64 ^ userKey64) & 0xFFFFFFFFFFFFFFFFn;
-}
-
-/****************************************************
- * 10) الكلمة → BigInt (مع تشفير)
- ****************************************************/
-function encodeWordToBigInt(wordRaw, userKey) {
-    const word = normalizeArabic(wordRaw);
-    if (!word) return 0n;
-
-    const userKey64 = userKeyTo64Bit(userKey);
-    const blocks = splitToBlocks12(word);
-
-    let result = 0n;
-
-    for (const block of blocks) {
-        const b64 = encodeBlockTo64(block);
-        const enc = encryptBlock64(b64, userKey64);
-        result = (result << 64n) | enc;
+    if (name.endsWith(".txt")) {
+        const text = await file.text();
+        inputText.value = text;
+        return;
     }
 
-    return result;
+    if (name.endsWith(".docx")) {
+        const text = await extractDocx(file);
+        inputText.value = text;
+        return;
+    }
+
+    if (name.endsWith(".pdf")) {
+        const text = await extractPDF(file);
+        inputText.value = text;
+        return;
+    }
+
+    alert("الملف غير مدعوم. استخدم TXT أو DOCX أو PDF.");
+});
+
+/****************************************************
+ * DOCX → نص
+ ****************************************************/
+async function extractDocx(file) {
+    await loadJSZip();
+    const zip = await JSZip.loadAsync(file);
+    const xml = await zip.file("word/document.xml").async("string");
+
+    // استخراج النص من XML
+    const text = xml
+        .replace(/<w:p[^>]*>/g, "\n")
+        .replace(/<[^>]+>/g, "")
+        .trim();
+
+    return text;
 }
 
 /****************************************************
- * 11) BigInt → كلمة (مع فك التشفير)
+ * PDF → نص
  ****************************************************/
-function decodeBigIntToWord(bigIntValue, userKey) {
-    const userKey64 = userKeyTo64Bit(userKey);
-    let x = bigIntValue;
+async function extractPDF(file) {
+    const arrayBuffer = await file.arrayBuffer();
+    const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
 
-    const blocks = [];
+    let text = "";
 
-    while (x > 0n) {
-        const enc = x & 0xFFFFFFFFFFFFFFFFn; // آخر 64‑bit
-        x >>= 64n;
-
-        const dec = decryptBlock64(enc, userKey64);
-        const block = decodeBlockFrom64(dec);
-        blocks.push(block);
+    for (let i = 1; i <= pdf.numPages; i++) {
+        const page = await pdf.getPage(i);
+        const content = await page.getTextContent();
+        const strings = content.items.map(item => item.str);
+        text += strings.join(" ") + "\n";
     }
 
-    blocks.reverse();
-    return blocks.join("");
+    return text;
 }
 
 /****************************************************
- * 12) BigInt → بايتات
+ * 2) تحويل النص إلى ALM‑64bit → صورة Xx16
  ****************************************************/
-function bigIntToBytes(bi) {
-    if (bi === 0n) return new Uint8Array([0]);
+encodeToImageBtn.addEventListener("click", () => {
+    const text = inputText.value.trim();
+    const userKey = userKeyInput.value.trim();
 
-    const bytes = [];
-    let x = bi;
-
-    while (x > 0n) {
-        bytes.push(Number(x & 0xffn));
-        x >>= 8n;
+    if (!text) {
+        alert("أدخل نصاً أولاً.");
+        return;
+    }
+    if (!userKey) {
+        alert("أدخل رمز المستخدم (User Key).");
+        return;
     }
 
-    bytes.reverse();
-    return new Uint8Array(bytes);
+    const words = text.split(" ");
+    const allBytes = [];
+
+    for (const w of words) {
+        const bi = encodeWordToBigInt(w, userKey);
+        const bytes = bigIntToBytes(bi);
+
+        if (bytes.length > 255) {
+            alert("كلمة نتج عنها أكثر من 255 بايت. غير مسموح.");
+            return;
+        }
+
+        allBytes.push(bytes.length);
+        for (let i = 0; i < bytes.length; i++) {
+            allBytes.push(bytes[i]);
+        }
+    }
+
+    const data = new Uint8Array(allBytes);
+    bytesToImage(data);
+
+    alert("تم تحويل النص إلى صورة بنظام ALM‑64bit.");
+});
+
+/****************************************************
+ * Xx16: تخزين البايتات في القناة R لصورة 1024×1024
+ ****************************************************/
+const canvas = document.getElementById("canvas");
+const ctx = canvas.getContext("2d");
+
+function bytesToImage(data) {
+    const size = 1024;
+    const imgData = ctx.createImageData(size, size);
+    const total = size * size;
+
+    for (let i = 0; i < total; i++) {
+        const b = i < data.length ? data[i] : 0;
+        const idx = i * 4;
+        imgData.data[idx + 0] = b;
+        imgData.data[idx + 1] = 0;
+        imgData.data[idx + 2] = 0;
+        imgData.data[idx + 3] = 255;
+    }
+
+    ctx.putImageData(imgData, 0, 0);
+}
+
+function imageToBytes() {
+    const size = 1024;
+    const imgData = ctx.getImageData(0, 0, size, size);
+    const total = size * size;
+    const out = new Uint8Array(total);
+
+    for (let i = 0; i < total; i++) {
+        out[i] = imgData.data[i * 4];
+    }
+
+    return out;
 }
 
 /****************************************************
- * 13) بايتات → BigInt
+ * 3) استرجاع النص الحقيقي من الصورة
  ****************************************************/
-function bytesToBigInt(bytes) {
-    let bi = 0n;
-    for (let i = 0; i < bytes.length; i++) {
-        bi = (bi << 8n) | BigInt(bytes[i]);
+decodeFromImageBtn.addEventListener("click", () => {
+    const userKey = userKeyInput.value.trim();
+    if (!userKey) {
+        alert("أدخل رمز المستخدم (User Key) لفك التشفير.");
+        return;
     }
-    return bi;
-}
+
+    const bytes = imageToBytes();
+    const words = [];
+    let i = 0;
+
+    while (i < bytes.length) {
+        const len = bytes[i++];
+        if (len === 0 || i + len > bytes.length) break;
+
+        const slice = bytes.slice(i, i + len);
+        i += len;
+
+        const bi = bytesToBigInt(slice);
+        const word = decodeBigIntToWord(bi, userKey);
+        words.push(word);
+    }
+
+    outputText.value = words.join(" ");
+});
+
+/****************************************************
+ * 4) تحميل الصورة
+ ****************************************************/
+downloadImageBtn.addEventListener("click", () => {
+    const link = document.createElement("a");
+    link.download = "alm64.png";
+    link.href = canvas.toDataURL("image/png");
+    link.click();
+});
+
+/****************************************************
+ * 5) حفظ النص المسترجع
+ ****************************************************/
+downloadRecoveredTxtBtn.addEventListener("click", () => {
+    const text = outputText.value;
+    const blob = new Blob([text], { type: "text/plain;charset=utf-8" });
+    const link = document.createElement("a");
+    link.download = "recovered.txt";
+    link.href = URL.createObjectURL(blob);
+    link.click();
+});
+
+/****************************************************
+ * 6) تحميل صورة للاسترجاع
+ ****************************************************/
+imageInput.addEventListener("change", () => {
+    const file = imageInput.files && fileInput.files[0];
+    if (!file) return;
+
+    const img = new Image();
+    const reader = new FileReader();
+
+    reader.onload = () => {
+        img.onload = () => {
+            ctx.drawImage(img, 0, 0, 1024, 1024);
+        };
+        img.src = reader.result;
+    };
+
+    reader.readAsDataURL(file);
+});
