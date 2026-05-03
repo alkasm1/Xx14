@@ -1,81 +1,518 @@
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
-    <meta charset="UTF-8" />
-    <title>ALM‑64bit Xx16 Encoder</title>
-
-    <link rel="stylesheet" href="style.css" />
-
-    <!-- PDF.js -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.2.67/pdf.min.js"></script>
-
-    <!-- JSZip -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+  <meta charset="UTF-8">
+  <title>ALM GeoFreq Core v4.1C — نصوص عربية إلى صورة نقاط</title>
+  <meta name="description" content="ALM GeoFreq Core v4.1C — ترميز النصوص العربية إلى صورة نقاط قابلة للعكس باستخدام بروتوكول ALM. المطوّر: رأفت عمر (Raafat Omar).">
+  <meta name="author" content="Raafat Omar - رأفت عمر">
+  <!--
+    ALM DIGITAL WATERMARK (HIDDEN)
+    المطوّر: رأفت عمر
+    ALM_WM: رأفت عمر | Raafat Omar | ALM GeoFreq Core v4.1C
+  -->
+  <style>
+    body {
+      font-family: "Cairo", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #f5f7fa;
+      color: #222;
+      margin: 0;
+      padding: 0;
+    }
+    header {
+      background: #0BA37F;
+      color: white;
+      padding: 16px 12px;
+      text-align: center;
+      font-size: 22px;
+      font-weight: 700;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+    }
+    header small {
+      display: block;
+      font-size: 13px;
+      opacity: 0.9;
+      margin-top: 4px;
+    }
+    .container {
+      padding: 20px;
+      max-width: 960px;
+      margin: 20px auto 40px auto;
+      background: #ffffff;
+      border-radius: 12px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.06);
+    }
+    h3 {
+      margin-top: 18px;
+      margin-bottom: 6px;
+      font-size: 17px;
+    }
+    button {
+      width: 100%;
+      padding: 14px;
+      margin-top: 10px;
+      background: #0BA37F;
+      color: white;
+      border: none;
+      border-radius: 8px;
+      font-size: 16px;
+      cursor: pointer;
+      transition: background 0.2s ease, transform 0.05s ease;
+    }
+    button:hover { background: #0a8c6c; }
+    button:active { transform: scale(0.98); }
+    textarea, input[type="file"], input[type="text"] {
+      width: 100%;
+      padding: 11px 12px;
+      margin-top: 8px;
+      border: 1px solid #d0d4dd;
+      border-radius: 8px;
+      font-size: 15px;
+      box-sizing: border-box;
+    }
+    textarea {
+      resize: vertical;
+      min-height: 140px;
+    }
+    #outputText {
+      margin-top: 10px;
+      padding: 10px 12px;
+      border: 1px solid #d0d4dd;
+      border-radius: 8px;
+      min-height: 120px;
+      white-space: pre-wrap;
+      background: #fafbff;
+      font-size: 15px;
+    }
+    #canvasWrapper {
+      margin-top: 18px;
+      text-align: center;
+    }
+    #geoCanvas {
+      margin-top: 10px;
+      border-radius: 8px;
+      border: 1px solid #d0d4dd;
+      background: #ffffff;
+      max-width: 100%;
+    }
+    .row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 16px;
+      margin-top: 10px;
+    }
+    .col {
+      flex: 1 1 280px;
+    }
+    .hint {
+      font-size: 13px;
+      color: #666;
+      margin-top: 4px;
+    }
+    footer {
+      text-align: center;
+      font-size: 13px;
+      color: #777;
+      margin: 10px 0 20px 0;
+    }
+  </style>
 </head>
 
 <body>
-    <div class="app">
 
-        <h1>ALM‑64bit — Xx16 Encoder/Decoder</h1>
+<header>
+  ALM GeoFreq Core v4.1C — ترميز نصوص عربية إلى صورة نقاط
+  <small>بروتوكول ALM GeoFreq — تطوير: رأفت عمر (Raafat Omar)</small>
+</header>
 
-        <section class="panel">
-            <h2>🔐 رمز المستخدم (User Key)</h2>
-            <input id="userKey" type="text" placeholder="أدخل رمز المستخدم هنا..." />
-        </section>
+<div class="container">
 
-        <section class="panel">
-            <h2>📥 إدخال النص أو الملف</h2>
-
-            <label class="label">نص يدوي:</label>
-            <textarea id="inputText" placeholder="اكتب النص هنا..."></textarea>
-
-            <div class="row">
-                <div>
-                    <label class="label">اختيار ملف (TXT / DOCX / PDF):</label>
-                    <input type="file" id="fileInput" />
-                </div>
-                <button id="extractFromFileBtn">استخراج النص</button>
-            </div>
-
-            <div class="row">
-                <button id="encodeToImageBtn">تحويل النص إلى صورة</button>
-            </div>
-        </section>
-
-        <section class="panel">
-            <h2>🖼️ الصورة الناتجة</h2>
-            <canvas id="canvas" width="1024" height="1024"></canvas>
-
-            <div class="row">
-                <button id="downloadImageBtn">تحميل الصورة</button>
-            </div>
-        </section>
-
-        <section class="panel">
-            <h2>📤 استرجاع النص من الصورة</h2>
-
-            <div class="row">
-                <label class="label">اختيار صورة:</label>
-                <input type="file" id="imageInput" accept="image/png,image/jpeg" />
-            </div>
-
-            <div class="row">
-                <button id="decodeFromImageBtn">استخراج النص</button>
-            </div>
-
-            <label class="label">النص المسترجع:</label>
-            <textarea id="outputText" readonly></textarea>
-
-            <div class="row">
-                <button id="downloadRecoveredTxtBtn">حفظ كنص TXT</button>
-            </div>
-        </section>
-
+  <div class="row">
+    <div class="col">
+      <h3>مفتاح المستخدم (عدد صحيح كبير):</h3>
+      <input id="userKey" type="text" value="123456789" autocomplete="off">
+      <div class="hint">يمكنك تغييره لأي رقم كبير، ويجب استخدام نفس المفتاح عند الاستعادة.</div>
     </div>
+    <div class="col">
+      <h3>إعدادات الصورة:</h3>
+      <div class="hint">الحجم ثابت 1024×1024، مع رأس محمي في أول 4096 بكسل.</div>
+    </div>
+  </div>
 
-    <!-- يجب أن يكون ترتيب السكربتات بهذا الشكل بالضبط -->
-    <script src="alm64.js"></script>
-    <script src="script.js"></script>
+  <h3>النص العربي:</h3>
+  <textarea id="inputText" placeholder="اكتب نصًا عربيًا هنا..."></textarea>
+
+  <button id="encodeBtn">تحويل النص إلى صورة نقاط</button>
+
+  <div id="canvasWrapper">
+    <canvas id="geoCanvas"></canvas>
+    <button id="saveBtn">💾 حفظ الصورة</button>
+  </div>
+
+  <hr style="margin: 24px 0;">
+
+  <h3>استعادة النص من صورة:</h3>
+  <input type="file" id="imageInput" accept="image/png">
+  <button id="decodeBtn">استعادة النص</button>
+
+  <h4 style="margin-top: 18px;">النص المستعاد:</h4>
+  <div id="outputText">(لا توجد بيانات بعد)</div>
+
+</div>
+
+<footer>
+  ALM GeoFreq Core v4.1C — Developed by Raafat Omar (رأفت عمر)
+</footer>
+
+<script>
+/* ============================================================
+   ALM_CORE SPEC (منطقي / توصيفي)
+   هذه ليست للتنفيذ المباشر، بل كتوصيف بروتوكولي للمنطق.
+============================================================ */
+/*
+PROGRAM normalizeArabic:
+  INPUT  s
+  LET s = REPLACE(s, ["إ","أ","آ"], "ا")
+  LET s = REPLACE(s, ["ى"], "ي")
+  LET s = REPLACE(s, ["ؤ"], "و")
+  LET s = REPLACE(s, ["ئ"], "ي")
+  LET s = REPLACE(s, ["ة"], "ه")
+  RETURN s
+END
+
+PROGRAM wordToCode:
+  INPUT word
+  LET C = 0
+  LET base = 32
+  LET LMAX = 12
+  FOR i FROM 0 TO LMAX-1:
+      digit[i] = INDEX_OF_REVERSED_CHAR(word, i) OR 0
+      C = C + digit[i] * (base ^ i)
+  RETURN C
+END
+
+PROGRAM codeToWord:
+  INPUT C
+  LET base = 32
+  LET LMAX = 12
+  FOR i FROM 0 TO LMAX-1:
+      digit[i] = C % base
+      C = C / base
+  RETURN MAP_DIGITS_TO_CHARS_REVERSED(digit[])
+END
+*/
+
+/* ============================================================
+   CONSTANTS + DIGITAL WATERMARK (مخفية)
+============================================================ */
+const ALM_VERSION      = "ALM-GEOFREQ-CORE-v4.1C";
+const ALM_DEV_NAME_AR  = "رأفت عمر";
+const ALM_DEV_NAME_EN  = "Raafat Omar";
+const ALM_WATERMARK    = "رأفت عمر"; // بصمة رقمية مخفية منطقياً داخل البروتوكول
+const CANVAS_SIZE      = 1024;
+const HEADER_PIXELS    = 4096; // منطقة رأس محمية
+const BYTES_PER_BLOCK  = 8;
+const B                = 32;
+const LMAX             = 12;
+
+/* ============================================================
+   Arabic Normalization (تنفيذ فعلي)
+============================================================ */
+function normalizeArabic(s) {
+  return (s || "")
+    .replace(/[إأآ]/g, "ا")
+    .replace(/ى/g, "ي")
+    .replace(/ؤ/g, "و")
+    .replace(/ئ/g, "ي")
+    .replace(/ة/g, "ه");
+}
+
+/* ============================================================
+   Alphabet Table (Base‑32)
+============================================================ */
+const indexToChar = {
+  0:"",1:"ا",2:"ب",3:"ت",4:"ث",5:"ج",6:"ح",7:"خ",
+  8:"د",9:"ذ",10:"ر",11:"ز",12:"س",13:"ش",14:"ص",
+  15:"ض",16:"ط",17:"ظ",18:"ع",19:"غ",20:"ف",21:"ق",
+  22:"ك",23:"ل",24:"م",25:"ن",26:"ه",27:"و",28:"ي"
+};
+
+const charToIndex = {};
+for (const [i, ch] of Object.entries(indexToChar)) {
+  if (ch) charToIndex[ch] = parseInt(i, 10);
+}
+
+/* ============================================================
+   Split Word into Blocks
+============================================================ */
+function splitWord(word) {
+  const blocks = [];
+  for (let i = 0; i < word.length; i += LMAX) {
+    blocks.push(word.slice(i, i + LMAX));
+  }
+  return blocks;
+}
+
+/* ============================================================
+   word → C (BigInt)
+============================================================ */
+function wordToCode(word) {
+  const c = new Array(LMAX).fill(0);
+  let pos = 0;
+  for (let i = word.length - 1; i >= 0; i--) {
+    const ch = word[i];
+    const idx = charToIndex[ch];
+    if (idx === undefined) {
+      throw new Error("حرف غير مدعوم في الترميز: " + ch);
+    }
+    c[pos++] = idx;
+  }
+  let C = 0n;
+  for (let i = 0; i < LMAX; i++) {
+    C += BigInt(c[i]) * (BigInt(B) ** BigInt(i));
+  }
+  return C;
+}
+
+/* ============================================================
+   C → word
+============================================================ */
+function codeToWord(Cbig) {
+  let C = BigInt(Cbig);
+  const digits = [];
+  for (let i = 0; i < LMAX; i++) {
+    digits.push(Number(C % BigInt(B)));
+    C /= BigInt(B);
+  }
+  let w = "";
+  for (let i = LMAX - 1; i >= 0; i--) {
+    w += indexToChar[digits[i]] || "";
+  }
+  return w;
+}
+
+/* ============================================================
+   ALM Header Encoding (داخل أول 4096 بكسل)
+   نكتب سلسلة تعريفية + توقيع بسيط + بصمة رقمية منطقية.
+============================================================ */
+function writeAlmHeader(ctx) {
+  const headerText = [
+    ALM_VERSION,
+    "DEV_AR:" + ALM_DEV_NAME_AR,
+    "DEV_EN:" + ALM_DEV_NAME_EN,
+    "WM:" + ALM_WATERMARK
+  ].join("|");
+
+  const encoder = new TextEncoder();
+  const bytes = encoder.encode(headerText);
+
+  const size = CANVAS_SIZE;
+  const imgData = ctx.getImageData(0, 0, size, size);
+  const data = imgData.data;
+
+  // نكتب البايتات في أول HEADER_PIXELS، رمادي غامق (غير أبيض)
+  for (let i = 0; i < HEADER_PIXELS; i++) {
+    const byteVal = i < bytes.length ? bytes[i] : 0;
+    const gray = 40 + (byteVal % 160); // بين 40 و 199 تقريبًا
+    const idx = i * 4;
+    data[idx]     = gray;
+    data[idx + 1] = gray;
+    data[idx + 2] = gray;
+    data[idx + 3] = 255;
+  }
+
+  ctx.putImageData(imgData, 0, 0);
+}
+
+/* ============================================================
+   Encode Text → Image (8 pixels per block)
+============================================================ */
+function encodeGeoFreq() {
+  try {
+    const keyStr = document.getElementById("userKey").value.trim() || "0";
+    const key = BigInt(keyStr);
+    let text = normalizeArabic(document.getElementById("inputText").value.trim());
+
+    if (!text) {
+      alert("الرجاء إدخال نص عربي أولاً.");
+      return;
+    }
+
+    const words = text.split(/\s+/).filter(Boolean);
+    const blocks = [];
+
+    for (const w of words) {
+      for (const b of splitWord(w)) {
+        if (b) blocks.push(b);
+      }
+    }
+
+    const maxPixels = CANVAS_SIZE * CANVAS_SIZE;
+    const neededPixels = HEADER_PIXELS + blocks.length * BYTES_PER_BLOCK;
+
+    if (neededPixels > maxPixels) {
+      alert("النص طويل جدًا لصورة واحدة 1024×1024. حاول تقليل النص.");
+      return;
+    }
+
+    const canvas = document.getElementById("geoCanvas");
+    canvas.width = CANVAS_SIZE;
+    canvas.height = CANVAS_SIZE;
+
+    const ctx = canvas.getContext("2d");
+    ctx.fillStyle = "white";
+    ctx.fillRect(0, 0, CANVAS_SIZE, CANVAS_SIZE);
+
+    // كتابة رأس ALM
+    writeAlmHeader(ctx);
+
+    // ترميز البلوكات
+    blocks.forEach((block, blockIndex) => {
+      const C  = wordToCode(block);
+      const C2 = C ^ key;
+
+      for (let byteIndex = 0; byteIndex < BYTES_PER_BLOCK; byteIndex++) {
+        const byteVal = Number((C2 >> BigInt(8 * byteIndex)) & 0xFFn);
+
+        const p = HEADER_PIXELS + blockIndex * BYTES_PER_BLOCK + byteIndex;
+        const x = p % CANVAS_SIZE;
+        const y = Math.floor(p / CANVAS_SIZE);
+
+        const gray = 255 - byteVal;
+        const imgData = ctx.createImageData(1, 1);
+        imgData.data[0] = gray;
+        imgData.data[1] = gray;
+        imgData.data[2] = gray;
+        imgData.data[3] = 255;
+        ctx.putImageData(imgData, x, y);
+      }
+    });
+
+    document.getElementById("outputText").textContent = "(تم إنشاء الصورة بنجاح، يمكنك حفظها أو استخدامها للاستعادة)";
+    alert("✔ تم تحويل النص إلى صورة نقاط (8 نقاط لكل بلوك) بنجاح.");
+  } catch (err) {
+    console.error(err);
+    alert("حدث خطأ أثناء عملية الترميز: " + err.message);
+  }
+}
+
+/* ============================================================
+   Save Image
+============================================================ */
+function saveImage() {
+  const canvas = document.getElementById("geoCanvas");
+  if (!canvas.width || !canvas.height) {
+    alert("لا توجد صورة حالية للحفظ. قم أولاً بترميز نص.");
+    return;
+  }
+  const url = canvas.toDataURL("image/png");
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "alm-geofreq-core-v4.1C.png";
+  a.click();
+}
+
+/* ============================================================
+   Decode Image → Text
+============================================================ */
+function decodeGeoFreq() {
+  const file = document.getElementById("imageInput").files[0];
+  if (!file) {
+    alert("الرجاء اختيار صورة PNG تم إنشاؤها بواسطة هذا النظام.");
+    return;
+  }
+
+  const keyStr = document.getElementById("userKey").value.trim() || "0";
+  let key;
+  try {
+    key = BigInt(keyStr);
+  } catch (e) {
+    alert("مفتاح غير صالح. الرجاء إدخال عدد صحيح صحيح.");
+    return;
+  }
+
+  const img = new Image();
+  img.onload = () => {
+    try {
+      const canvas = document.getElementById("geoCanvas");
+      const ctx = canvas.getContext("2d");
+
+      canvas.width = img.width;
+      canvas.height = img.height;
+      ctx.drawImage(img, 0, 0);
+
+      const size = canvas.width;
+      const totalPixels = size * size;
+      const imgData = ctx.getImageData(0, 0, size, size);
+      const data = imgData.data;
+
+      const blocksBytes = [];
+
+      // نتجاهل منطقة الرأس (HEADER_PIXELS) ونبدأ من بعدها
+      for (let p = HEADER_PIXELS; p < totalPixels; p++) {
+        const x = p % size;
+        const y = Math.floor(p / size);
+        const i = (y * size + x) * 4;
+
+        const r = data[i];
+        const g = data[i + 1];
+        const b = data[i + 2];
+
+        // إذا كان البكسل أبيض بالكامل، نعتبره فارغًا
+        if (r === 255 && g === 255 && b === 255) continue;
+
+        const gray = r; // الصورة رمادية
+        const byteVal = 255 - gray;
+
+        const blockIndex = Math.floor((p - HEADER_PIXELS) / BYTES_PER_BLOCK);
+        const byteIndex  = (p - HEADER_PIXELS) % BYTES_PER_BLOCK;
+
+        if (!blocksBytes[blockIndex]) {
+          blocksBytes[blockIndex] = new Array(BYTES_PER_BLOCK).fill(0);
+        }
+        blocksBytes[blockIndex][byteIndex] = byteVal;
+      }
+
+      const blocks = [];
+
+      for (let blockIndex = 0; blockIndex < blocksBytes.length; blockIndex++) {
+        const bytes = blocksBytes[blockIndex];
+        if (!bytes) continue;
+
+        let C2 = 0n;
+        for (let byteIndex = 0; byteIndex < BYTES_PER_BLOCK; byteIndex++) {
+          const bVal = BigInt(bytes[byteIndex] || 0);
+          C2 |= (bVal << BigInt(8 * byteIndex));
+        }
+
+        const C = C2 ^ key;
+        const block = codeToWord(C);
+        if (block && block.trim()) {
+          blocks.push(block);
+        }
+      }
+
+      const text = blocks.join(" ");
+      document.getElementById("outputText").textContent = text || "(لا توجد بيانات مستعادة أو المفتاح غير صحيح)";
+    } catch (err) {
+      console.error(err);
+      alert("حدث خطأ أثناء عملية الاستعادة: " + err.message);
+    }
+  };
+
+  img.onerror = () => {
+    alert("تعذر قراءة الصورة. تأكد أنها صورة PNG تم إنشاؤها من هذا التطبيق.");
+  };
+
+  img.src = URL.createObjectURL(file);
+}
+
+/* ============================================================
+   Event Binding (Production-ready)
+============================================================ */
+document.getElementById("encodeBtn").addEventListener("click", encodeGeoFreq);
+document.getElementById("saveBtn").addEventListener("click", saveImage);
+document.getElementById("decodeBtn").addEventListener("click", decodeGeoFreq);
+</script>
 
 </body>
 </html>
